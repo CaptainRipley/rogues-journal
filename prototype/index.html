@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rogue's Journal — Act I</title>
+  <style>
+    :root { --ink:#1a1410; --ink-soft:#3a2f28; --page:#cbb89a; --page-dark:#a89070; --blood:#6b2b24; --gold:#b58a3d; --night:#0d0c0b; --torch:#d4893a; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:var(--night); color:var(--ink); font-family: Palatino, "Book Antiqua", Georgia, serif; }
+    #app { max-width:980px; margin:0 auto; min-height:100%; }
+    header { display:flex; justify-content:space-between; padding:14px 18px 8px; color:var(--page); letter-spacing:.18em; font-size:12px; text-transform:uppercase; }
+    header strong { color:var(--gold); letter-spacing:.28em; }
+    .hud { display:flex; flex-wrap:wrap; gap:10px 18px; padding:0 18px 12px; color:var(--page-dark); font-size:13px; }
+    .hud b { color:var(--page); }
+    .pip { color:var(--gold); }
+    .scene { margin:0 18px; height:220px; border:3px solid #1f1814; position:relative; overflow:hidden; }
+    .scene .sky,.scene .ground,.scene .prop { position:absolute; }
+    .label { position:absolute; right:10px; bottom:8px; color:var(--page); font-size:11px; letter-spacing:.14em; text-transform:uppercase; opacity:.75; }
+    .journal { margin:16px 18px 8px; background: linear-gradient(90deg, rgba(0,0,0,.08) 0 18px, transparent 18px), repeating-linear-gradient(to bottom, var(--page) 0 31px, rgba(80,50,20,.12) 31px 32px); padding:22px 28px 22px 36px; min-height:220px; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+    .journal h1 { font-size:15px; letter-spacing:.16em; text-transform:uppercase; margin:0 0 10px; color:var(--blood); }
+    .journal p { margin:0 0 .8em; line-height:1.45; font-size:18px; }
+    .choices { padding:8px 18px 28px; display:flex; flex-direction:column; gap:8px; }
+    button.choice { text-align:left; background:#161210; color:var(--page); border:1px solid #3d3228; padding:12px 14px; font-family:inherit; font-size:16px; cursor:pointer; }
+    button.choice:hover { border-color:var(--gold); }
+    button.choice small { display:block; color:var(--gold); letter-spacing:.12em; text-transform:uppercase; font-size:10px; margin-bottom:4px; }
+    .meta { padding:0 18px 20px; color:#6a5a4a; font-size:12px; }
+    .s-house { background:linear-gradient(#14110f,#0b0a09); }
+    .s-house .ground { bottom:0;left:0;right:0;height:70px;background:#2a221c; }
+    .s-house .prop.door { left:46%;bottom:70px;width:48px;height:88px;background:#3a2a22; }
+    .s-house .prop.loom { left:18%;bottom:70px;width:70px;height:54px;background:#5a3a28; }
+    .s-house .prop.rain { inset:0; background:repeating-linear-gradient(115deg, transparent 0 12px, rgba(180,190,200,.08) 12px 13px); }
+    .s-road { background:#12161a; }
+    .s-road .ground { bottom:0;height:90px;left:0;right:0;background:#3a342c; }
+    .s-road .prop.tree { left:8%;bottom:80px;width:28px;height:110px;background:#1a1c18; }
+    .s-road .prop.gallows { right:18%;bottom:90px;width:80px;height:90px;background:#2a241c; }
+    .s-toll { background:#15120f; }
+    .s-toll .ground { bottom:0;height:80px;left:0;right:0;background:#2c241c; }
+    .s-toll .prop.booth { left:30%;bottom:80px;width:160px;height:100px;background:#4a3428; }
+    .s-toll .prop.torch { left:22%;bottom:80px;width:8px;height:70px;background:#2a2018; box-shadow:0 -10px 24px var(--torch); }
+    .s-inn { background:#1a100c; }
+    .s-inn .ground { bottom:0;height:60px;left:0;right:0;background:#3a2418; }
+    .s-inn .prop.bar { left:10%;right:10%;bottom:60px;height:50px;background:#5a3824; }
+    .s-inn .prop.fire { left:72%;bottom:110px;width:40px;height:50px;background:var(--torch); box-shadow:0 0 40px var(--torch); }
+    .s-wall { background:#0c1014; }
+    .s-wall .prop.wall { left:0;right:0;bottom:40px;height:130px;background:#2a3036; }
+    .s-wall .prop.gate { left:42%;bottom:40px;width:70px;height:100px;background:#1a1612; }
+    .s-end { background:#140c0a; }
+    .s-end .prop.hall { inset:20px 40px 30px; background:#3a2018; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header><div><strong>Rogue's Journal</strong></div><div>Act I · The Road to the Feast</div></header>
+    <div class="hud" id="hud"></div>
+    <div class="scene" id="scene"></div>
+    <article class="journal" id="page"></article>
+    <div class="choices" id="choices"></div>
+    <div class="meta">Working title prototype. Choices raise Steel, Shadow, Tongue, or Spark.</div>
+  </div>
+  <script>
+    const state = { steel:0,shadow:0,tongue:0,spark:0,nerve:3,heat:0,coin:2,rumor:0,flags:{} };
+    const scenes = {
+      house:`<div class="s-house"><div class="prop rain"></div><div class="prop loom"></div><div class="prop door"></div><div class="ground"></div></div>`,
+      road:`<div class="s-road"><div class="prop tree"></div><div class="prop gallows"></div><div class="ground"></div></div>`,
+      toll:`<div class="s-toll"><div class="prop torch"></div><div class="prop booth"></div><div class="ground"></div></div>`,
+      inn:`<div class="s-inn"><div class="prop fire"></div><div class="prop bar"></div><div class="ground"></div></div>`,
+      wall:`<div class="s-wall"><div class="prop wall"></div><div class="prop gate"></div></div>`,
+      end:`<div class="s-end"><div class="prop hall"></div></div>`
+    };
+    const nodes = {
+      start:{scene:"house",label:"The empty house",title:"Page I",body:[
+        "Rain on the thatch. The loom is still threaded. She would hate that. I hate that I noticed the thread before the door.",
+        "Nine days. The king called it an invitation. The spears called it something else. Tonight he feeds the court a swan and a story in which she chose him.",
+        "I am going to Redhollow. I am writing this in case the road writes back."
+      ],choices:[
+        {t:"Steel",l:"Oil the knife. Count the miles in cuts.",go:"road",add:{steel:1}},
+        {t:"Shadow",l:"Pack the picks. Leave the house looking lived-in.",go:"road",add:{shadow:1}},
+        {t:"Tongue",l:"Rehearse a name that is not mine.",go:"road",add:{tongue:1}},
+        {t:"Spark",l:"Take the charm from the lintel. It still hums like a bad tooth.",go:"road",add:{spark:1}}
+      ]},
+      road:{scene:"road",label:"The Harth road",title:"Page II",body:[
+        "Mud to the ankles. A sign that used to say WELCOME hangs by one nail, like it thought better of it.",
+        "Somewhere ahead: Hob's toll. Beyond that, an inn named after the king. Beyond that, stone the color of old blood."
+      ],choices:[{t:"Keep walking",l:"The feast will not wait on my feelings.",go:"toll"}]},
+      toll:{scene:"toll",label:"Hob's toll",title:"Page III",body:[
+        "Hob smiles with the left side of his face. The right side has heard too many stories.",
+        "Road tax, he says. Feast night. Double, unless you're expected.",
+        "I am expected. Just not at the door."
+      ],choices:[
+        {t:"Steel",l:"Show him the knife. Not the point. The fact of it.",go:"toll_steel",add:{steel:1,heat:1}},
+        {t:"Shadow",l:"Pay with the left hand. Lift the gate-key with the right.",go:"toll_shadow",add:{shadow:1}},
+        {t:"Tongue",l:"Claim I am the baron's cousin.",go:"toll_tongue",add:{tongue:1}},
+        {t:"Spark",l:"A sneeze-charm. The key will find the ditch.",go:"toll_spark",add:{spark:1}},
+        {t:"Coin",l:"Pay the man. Keep moving.",go:"inn",add:{coin:-1},needCoin:true}
+      ]},
+      toll_steel:{scene:"toll",label:"Hob's toll",title:"Page III · continued",body:["Hob looks at the knife. Pass, he says. If anyone asks, you were a priest. He will tell the next soldier the truth."],flags:{hobScar:true},choices:[{t:"Onward",l:"The inn lights are a lie, but they are dry.",go:"inn"}]},
+      toll_shadow:{scene:"toll",label:"Hob's toll",title:"Page III · continued",body:["The key is iron and greasy and now mine. I will need this at a smaller door than he thinks."],flags:{gateKey:true},choices:[{t:"Onward",l:"Pocket the key. Do not whistle.",go:"inn"}]},
+      toll_tongue:{scene:"toll",label:"Hob's toll",title:"Page III · continued",body:["I become Cousin Ralf of the eastern orchards. Hob has never met Ralf. That is why it works."],flags:{cousinRalf:true},choices:[{t:"Onward",l:"Walk like a man with orchards.",go:"inn"}]},
+      toll_spark:{scene:"toll",label:"Hob's toll",title:"Page III · continued",body:["Hob sneezes the key into the puddle. Something in the ditch-water listens a little longer than it should."],flags:{gateKey:true,listened:true},choices:[{t:"Onward",l:"Wipe the key. Do not thank the ditch.",go:"inn"}]},
+      inn:{scene:"inn",label:"The Generous Cup",title:"Page IV",body:[
+        "They named the inn after him. The ale tastes like a policy.",
+        "A lute cannot stay in tune whenever someone says His Generous Majesty."
+      ],choices:[
+        {t:"Steel",l:"Sit with the caravan guards.",go:"inn_steel",add:{steel:1}},
+        {t:"Shadow",l:"Take a cloak from the pegs.",go:"inn_shadow",add:{shadow:1}},
+        {t:"Tongue",l:"Buy a round. Harvest what mouths spill.",go:"inn_tongue",add:{tongue:1,coin:-1,rumor:1}},
+        {t:"Spark",l:"Ask the fire who is expected.",go:"inn_spark",add:{spark:1}}
+      ]},
+      inn_steel:{scene:"inn",label:"The Generous Cup",title:"Page IV · continued",body:["One guard sells me the hour the kitchen door is unlatched."],flags:{kitchenHour:true},choices:[{t:"Leave",l:"Night is cheaper outside.",go:"wall"}]},
+      inn_shadow:{scene:"inn",label:"The Generous Cup",title:"Page IV · continued",body:["In the cloak lining: a bent invitation seal, black wax, the king's cheap sun."],flags:{fakeSeal:true},choices:[{t:"Leave",l:"The pegs will not miss what they did not own.",go:"wall"}]},
+      inn_tongue:{scene:"inn",label:"The Generous Cup",title:"Page IV · continued",body:["The woman sits in the east gallery during the first course. Sister Pell brings her water."],flags:{eastGallery:true},choices:[{t:"Leave",l:"Do not toast.",go:"wall"}]},
+      inn_spark:{scene:"inn",label:"The Generous Cup",title:"Page IV · continued",body:["Fire says Pell keeps a key on a string because she does not trust doors that belong to kings."],flags:{pellKey:true,listened:true},choices:[{t:"Leave",l:"Do not ask the fire a second question.",go:"wall"}]},
+      wall:{scene:"wall",label:"Redhollow outer wall",title:"Page V",body:[
+        "Stone the color of old blood after rain. The feast is a noise on the other side of the wall.",
+        "This is as far as tonight's pages go. The next book starts inside."
+      ],choices:[
+        {t:"Steel",l:"The kitchen hour, or a bad idea with a knife.",go:"end"},
+        {t:"Shadow",l:"The small door. Key or no key.",go:"end"},
+        {t:"Tongue",l:"Walk to the gate as Cousin Ralf.",go:"end"},
+        {t:"Spark",l:"Ask the moat to look away.",go:"end"}
+      ]},
+      end:{scene:"end",label:"End of Act I",title:"The page turns",body:[],choices:[{t:"Again",l:"Write it differently.",go:"start",reset:true}]}
+    };
+    function apply(add={}){ for (const [k,v] of Object.entries(add)) state[k]=(state[k]||0)+v; state.coin=Math.max(0,state.coin); }
+    function summary(){
+      const f=state.flags, bits=[];
+      if(f.gateKey) bits.push("You carry Hob's gate-key.");
+      if(f.cousinRalf) bits.push("You are still, on paper, Cousin Ralf.");
+      if(f.hobScar) bits.push("Hob will talk. Heat is a second shadow.");
+      if(f.kitchenHour) bits.push("You know when the kitchen unlatches.");
+      if(f.fakeSeal) bits.push("A bent black-wax seal sits in your cloak.");
+      if(f.eastGallery) bits.push("Mara is in the east gallery for the first course.");
+      if(f.pellKey) bits.push("Pell's key is a story you can walk toward.");
+      if(f.listened) bits.push("Something listened when you used the old words.");
+      if(!bits.length) bits.push("You arrived with empty hands and a full grudge.");
+      const lead=Object.entries({Steel:state.steel,Shadow:state.shadow,Tongue:state.tongue,Spark:state.spark}).sort((a,b)=>b[1]-a[1])[0];
+      bits.push("The road wrote you down as "+lead[0]+".");
+      bits.push("Act II is the kitchens, the chapel, the gallery — then the hall. Mara is already counting exits.");
+      return bits;
+    }
+    function renderHud(){
+      const pip=n=>"\u2726".repeat(n)+"\u00b7".repeat(Math.max(0,3-n));
+      document.getElementById("hud").innerHTML = `Nerve <b>${state.nerve}</b> Heat <b>${state.heat}</b> Coin <b>${state.coin}</b> Rumor <b>${state.rumor}</b> Steel <span class="pip">${pip(state.steel)}</span> Shadow <span class="pip">${pip(state.shadow)}</span> Tongue <span class="pip">${pip(state.tongue)}</span> Spark <span class="pip">${pip(state.spark)}</span>`;
+    }
+    function go(id){
+      const node=nodes[id];
+      document.getElementById("scene").innerHTML=scenes[node.scene]+`<div class="label">${node.label}</div>`;
+      const body=id==="end"?summary():node.body;
+      document.getElementById("page").innerHTML=`<h1>${node.title}</h1>`+body.map(p=>`<p>${p}</p>`).join("");
+      const box=document.getElementById("choices"); box.innerHTML="";
+      node.choices.forEach(c=>{
+        if(c.needCoin && state.coin<1) return;
+        const b=document.createElement("button"); b.className="choice";
+        b.innerHTML=`<small>${c.t}</small>${c.l}`;
+        b.onclick=()=>{
+          if(c.reset) Object.assign(state,{steel:0,shadow:0,tongue:0,spark:0,nerve:3,heat:0,coin:2,rumor:0,flags:{}});
+          apply(c.add); if(node.flags) Object.assign(state.flags,node.flags); go(c.go);
+        };
+        box.appendChild(b);
+      });
+      renderHud();
+    }
+    go("start");
+  </script>
+</body>
+</html>
