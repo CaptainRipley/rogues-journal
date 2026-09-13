@@ -3,8 +3,8 @@ extends Node3D
 enum Phase { TITLE, WAKE, GIFT, PLAY }
 enum PathId { NONE, STEEL, SONG, SPARK, FEATHER }
 
-const SPEED := 5.4
-const JUMP_V := 6.2
+const SPEED := 8.8
+const JUMP_V := 7.4
 const GRAVITY := 18.0
 const DITCH := Vector3(0.0, 0.0, 28.8)
 
@@ -31,6 +31,10 @@ var head: Node3D
 var camera: Camera3D
 var fairy: Node3D
 var gifts: Array = []
+var npcs: Array = []
+var sword_view: Node3D
+var lute_view: Node3D
+var book_view: Node3D
 var overlay: Control
 var talk_label: Label
 var prompt_label: Label
@@ -56,7 +60,7 @@ func _ready() -> void:
 func _build_world() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.55, 0.18, 0.12)
+	env.background_color = Color(0.045, 0.05, 0.06)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.55, 0.6, 0.68)
 	env.ambient_light_energy = 0.85
@@ -114,6 +118,7 @@ func _build_player() -> void:
 	camera.far = 200
 	head.add_child(camera)
 	add_child(player)
+	_build_viewmodels()
 	_apply_look()
 
 func _build_ditch() -> void:
@@ -138,35 +143,213 @@ func _build_ditch() -> void:
 	glow.light_energy = 5.0
 	glow.omni_range = 12.0
 	fairy.add_child(glow)
+	_tag(fairy, "Nix", 1.15)
 	add_child(fairy)
 
-	_add_gift("steel", Vector3(-1.7, 0.55, 25.4), Color(0.72, 0.75, 0.78), Vector3(0.08, 1.2, 0.06), "E — take the sword. Fight the party.")
-	_add_gift("song", Vector3(0.05, 0.28, 24.6), Color(0.54, 0.38, 0.19), Vector3(0.42, 0.22, 0.7), "E — take the lute. Get invited.")
-	_add_gift("spark", Vector3(1.75, 0.18, 25.5), Color(0.22, 0.12, 0.16), Vector3(0.32, 0.1, 0.42), "E — take the spellbook. Blast the party.")
+	_add_gift_node("steel", _make_sword(), Vector3(-1.7, 0.08, 25.4), "E — take the sword. Fight the party.")
+	_add_gift_node("song", _make_lute(), Vector3(0.05, 0.22, 24.6), "E — take the lute. Get invited.")
+	_add_gift_node("spark", _make_book(), Vector3(1.75, 0.08, 25.5), "E — take the spellbook. Blast the party.")
+	_build_npcs()
 
-func _add_gift(id: String, pos: Vector3, color: Color, size: Vector3, hint: String) -> void:
+func _tag(node: Node3D, text: String, y: float) -> void:
+	var lab := Label3D.new()
+	lab.text = text
+	lab.font_size = 36
+	lab.pixel_size = 0.012
+	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lab.modulate = Color(0.91, 0.84, 0.72)
+	lab.outline_size = 8
+	lab.outline_modulate = Color(0.05, 0.03, 0.02, 0.9)
+	lab.position.y = y
+	node.add_child(lab)
+
+func _mat(color: Color, rough := 0.7, metal := 0.0, emit: Color = Color(0, 0, 0, 0)) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = rough
+	m.metallic = metal
+	if emit.a > 0.0:
+		m.emission_enabled = true
+		m.emission = emit
+		m.emission_energy_multiplier = 1.3
+	return m
+
+func _mesh_part(mesh: Mesh, mat: Material, pos := Vector3.ZERO, rot := Vector3.ZERO, scl := Vector3.ONE) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
 	mi.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.7
-	if id == "spark":
-		mat.emission_enabled = true
-		mat.emission = Color(0.7, 0.3, 0.1)
-		mat.emission_energy_multiplier = 1.4
 	mi.material_override = mat
 	mi.position = pos
-	if id == "steel":
-		mi.rotation_degrees = Vector3(18, 20, 24)
-	add_child(mi)
-	var light := OmniLight3D.new()
-	light.light_energy = 1.4
-	light.omni_range = 5.0
-	light.light_color = color.lightened(0.3)
-	mi.add_child(light)
-	gifts.append({ "id": id, "node": mi, "hint": hint })
+	mi.rotation_degrees = rot
+	mi.scale = scl
+	return mi
+
+func _make_sword() -> Node3D:
+	var g := Node3D.new()
+	var loaded = load("res://assets/models/Sword.obj")
+	if loaded is Mesh:
+		var mi := MeshInstance3D.new()
+		mi.mesh = loaded
+		g.add_child(mi)
+		g.scale = Vector3(0.55, 0.55, 0.55)
+		g.rotation_degrees = Vector3(12, 35, 18)
+	else:
+		var blade := BoxMesh.new()
+		blade.size = Vector3(0.06, 1.15, 0.04)
+		g.add_child(_mesh_part(blade, _mat(Color(0.72, 0.76, 0.8), 0.28, 0.75), Vector3(0, 0.7, 0)))
+		var guard := BoxMesh.new()
+		guard.size = Vector3(0.32, 0.05, 0.08)
+		g.add_child(_mesh_part(guard, _mat(Color(0.55, 0.42, 0.2), 0.4, 0.5), Vector3(0, 0.16, 0)))
+		var hilt := BoxMesh.new()
+		hilt.size = Vector3(0.07, 0.22, 0.07)
+		g.add_child(_mesh_part(hilt, _mat(Color(0.22, 0.14, 0.08), 0.85), Vector3(0, 0.02, 0)))
+	_tag(g, "Sword", 1.35)
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(0.7, 0.75, 0.82)
+	glow.light_energy = 1.4
+	glow.omni_range = 5.0
+	g.add_child(glow)
+	return g
+
+func _make_lute() -> Node3D:
+	var g := Node3D.new()
+	var bowl := SphereMesh.new()
+	bowl.radius = 0.2
+	bowl.height = 0.28
+	g.add_child(_mesh_part(bowl, _mat(Color(0.48, 0.28, 0.12), 0.55, 0.08), Vector3.ZERO, Vector3.ZERO, Vector3(1.2, 0.55, 1.05)))
+	var hole := CylinderMesh.new()
+	hole.top_radius = 0.055
+	hole.bottom_radius = 0.055
+	hole.height = 0.02
+	g.add_child(_mesh_part(hole, _mat(Color(0.08, 0.05, 0.03)), Vector3(0, 0.08, 0.02), Vector3(90, 0, 0)))
+	var neck := BoxMesh.new()
+	neck.size = Vector3(0.055, 0.05, 0.62)
+	g.add_child(_mesh_part(neck, _mat(Color(0.28, 0.16, 0.07), 0.8), Vector3(0, 0.04, -0.46)))
+	var head := BoxMesh.new()
+	head.size = Vector3(0.1, 0.04, 0.14)
+	g.add_child(_mesh_part(head, _mat(Color(0.22, 0.12, 0.05)), Vector3(0, 0.06, -0.8)))
+	for i in 4:
+		var peg := SphereMesh.new()
+		peg.radius = 0.018
+		peg.height = 0.036
+		g.add_child(_mesh_part(peg, _mat(Color(0.7, 0.62, 0.4), 0.4, 0.3), Vector3(-0.03 + i * 0.02, 0.09, -0.78)))
+		var string := CylinderMesh.new()
+		string.top_radius = 0.004
+		string.bottom_radius = 0.004
+		string.height = 0.72
+		g.add_child(_mesh_part(string, _mat(Color(0.85, 0.8, 0.65)), Vector3(-0.03 + i * 0.02, 0.09, -0.38), Vector3(90, 0, 0)))
+	g.rotation_degrees = Vector3(-8, 40, 12)
+	_tag(g, "Lute", 0.7)
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(0.77, 0.64, 0.35)
+	glow.light_energy = 1.3
+	glow.omni_range = 5.0
+	g.add_child(glow)
+	return g
+
+func _make_book() -> Node3D:
+	var g := Node3D.new()
+	var cover := BoxMesh.new()
+	cover.size = Vector3(0.34, 0.06, 0.46)
+	g.add_child(_mesh_part(cover, _mat(Color(0.28, 0.08, 0.1), 0.7, 0.05, Color(0.45, 0.12, 0.05, 1)), Vector3(0, 0.03, 0)))
+	var pages := BoxMesh.new()
+	pages.size = Vector3(0.3, 0.045, 0.42)
+	g.add_child(_mesh_part(pages, _mat(Color(0.85, 0.78, 0.62), 0.95), Vector3(0.01, 0.05, 0)))
+	var spine := BoxMesh.new()
+	spine.size = Vector3(0.05, 0.08, 0.46)
+	g.add_child(_mesh_part(spine, _mat(Color(0.18, 0.06, 0.07), 0.65, 0.1), Vector3(-0.16, 0.04, 0)))
+	var clasp := BoxMesh.new()
+	clasp.size = Vector3(0.06, 0.02, 0.08)
+	g.add_child(_mesh_part(clasp, _mat(Color(0.72, 0.58, 0.28), 0.35, 0.7), Vector3(0.16, 0.08, 0)))
+	g.rotation_degrees = Vector3(0, -28, 0)
+	_tag(g, "Spellbook", 0.55)
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(0.83, 0.4, 0.18)
+	glow.light_energy = 1.8
+	glow.omni_range = 5.5
+	g.add_child(glow)
+	return g
+
+func _add_gift_node(id: String, node: Node3D, pos: Vector3, hint: String) -> void:
+	node.position = pos
+	add_child(node)
+	gifts.append({ "id": id, "node": node, "hint": hint })
+
+func _build_npcs() -> void:
+	_add_npc("hob", "Hob", Color(0.29, 0.23, 0.16), Vector3(1.8, 0, 3.4), 0.4, false, [
+		"Road tax. Feast night. Double, unless you're expected.",
+		"If anyone asks, you were a priest. I'm a businessman.",
+	])
+	_add_npc("marta", "Marta", Color(0.42, 0.16, 0.16), Vector3(11.6, 0, 6.2), -1.2, false, [
+		"They named this cup after him. The ale tastes like a policy.",
+		"East gallery, first course. That's where he parks what he stole.",
+	])
+	_add_npc("bren", "Guard Bren", Color(0.23, 0.27, 0.31), Vector3(-5.5, 0, -17.5), 0.0, true, [
+		"Kitchen door unlatches at the second bell. That's not a gift.",
+		"Keep that iron in its hole. Feast night is noisy enough.",
+	])
+	_add_npc("cole", "Guard Cole", Color(0.23, 0.27, 0.31), Vector3(5.5, 0, -17.5), 3.14, true, [
+		"Cousin of a baron, are you? They all are, tonight.",
+		"The swan is already burnt. His Generous Majesty will not notice.",
+	])
+	_add_npc("pell", "Sister Pell", Color(0.16, 0.16, 0.22), Vector3(-12, 0, 8), 1.1, false, [
+		"I keep a key because I do not trust doors that belong to kings.",
+		"Mara Venn has a spine. Try not to rescue her like furniture.",
+	])
+	_add_npc("ralf", "Drunk Ralf", Color(0.29, 0.29, 0.16), Vector3(18.5, 0, 12), 2.0, false, [
+		"I am Cousin Ralf of the eastern orchards. Ask anyone. Don't.",
+		"If you need a name at the gate, mine is already ruined. Be my guest.",
+	])
+
+func _add_npc(id: String, npc_name: String, tunic: Color, pos: Vector3, rot: float, guard: bool, lines: Array) -> void:
+	var g := Node3D.new()
+	g.position = pos
+	g.rotation.y = rot
+	var skin := _mat(Color(0.76, 0.58, 0.42), 0.9)
+	var cloth := _mat(tunic, 0.92)
+	var dark := _mat(Color(0.16, 0.13, 0.09), 0.95)
+	var torso := BoxMesh.new()
+	torso.size = Vector3(0.48, 0.72, 0.28)
+	g.add_child(_mesh_part(torso, cloth, Vector3(0, 1.05, 0)))
+	var hips := BoxMesh.new()
+	hips.size = Vector3(0.44, 0.22, 0.26)
+	g.add_child(_mesh_part(hips, dark, Vector3(0, 0.62, 0)))
+	var leg := BoxMesh.new()
+	leg.size = Vector3(0.16, 0.55, 0.16)
+	g.add_child(_mesh_part(leg, dark, Vector3(-0.12, 0.28, 0)))
+	g.add_child(_mesh_part(leg, dark, Vector3(0.12, 0.28, 0)))
+	var arm := BoxMesh.new()
+	arm.size = Vector3(0.12, 0.55, 0.12)
+	g.add_child(_mesh_part(arm, cloth, Vector3(-0.32, 1.0, 0)))
+	g.add_child(_mesh_part(arm, cloth, Vector3(0.32, 1.0, 0)))
+	var head := BoxMesh.new()
+	head.size = Vector3(0.26, 0.3, 0.24)
+	g.add_child(_mesh_part(head, skin, Vector3(0, 1.55, 0)))
+	if guard:
+		var helm := BoxMesh.new()
+		helm.size = Vector3(0.3, 0.16, 0.3)
+		g.add_child(_mesh_part(helm, _mat(Color(0.35, 0.38, 0.42), 0.4, 0.6), Vector3(0, 1.74, 0)))
+		var spear := CylinderMesh.new()
+		spear.top_radius = 0.02
+		spear.bottom_radius = 0.025
+		spear.height = 1.8
+		g.add_child(_mesh_part(spear, _mat(Color(0.4, 0.3, 0.18)), Vector3(0.38, 1.1, 0.05)))
+	if id == "pell":
+		var veil := BoxMesh.new()
+		veil.size = Vector3(0.32, 0.28, 0.08)
+		g.add_child(_mesh_part(veil, _mat(Color(0.1, 0.1, 0.14)), Vector3(0, 1.58, -0.12)))
+	if id == "ralf":
+		var jug := CylinderMesh.new()
+		jug.top_radius = 0.05
+		jug.bottom_radius = 0.06
+		jug.height = 0.18
+		g.add_child(_mesh_part(jug, _mat(Color(0.29, 0.22, 0.13)), Vector3(0.28, 0.95, 0.12)))
+	if id == "hob":
+		var bag := BoxMesh.new()
+		bag.size = Vector3(0.18, 0.16, 0.1)
+		g.add_child(_mesh_part(bag, _mat(Color(0.22, 0.16, 0.09)), Vector3(0.3, 0.9, 0)))
+	_tag(g, npc_name, 2.05)
+	add_child(g)
+	npcs.append({ "id": id, "name": npc_name, "node": g, "lines": lines, "purse": 4, "picked": false, "i": 0 })
 
 func _box(size: Vector3, pos: Vector3, color: Color, tex: Texture2D, solid: bool, repeat: float) -> void:
 	var mi := MeshInstance3D.new()
@@ -413,6 +596,18 @@ func _nearest_gift() -> Dictionary:
 			best = g
 	return best
 
+func _nearest_npc(max_d := 2.4) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d := max_d
+	for n in npcs:
+		if n["node"] == null or not is_instance_valid(n["node"]):
+			continue
+		var d: float = player.global_position.distance_to(n["node"].global_position)
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
+
 func _update_prompt() -> void:
 	if path == PathId.NONE:
 		var g := _nearest_gift()
@@ -422,8 +617,26 @@ func _update_prompt() -> void:
 			prompt = "E talk with Nix   ·   F pickpocket her for Feather Hands"
 		else:
 			prompt = "Sword · lute · spellbook in the mud. Or her pockets."
-	else:
-		prompt = "WASD move  ·  mouse look  ·  click swing  ·  R cast  ·  F pocket"
+		return
+	var n := _nearest_npc()
+	if not n.is_empty():
+		prompt = "E talk with %s" % n["name"]
+		if path == PathId.FEATHER:
+			prompt += "   ·   F pickpocket"
+		elif path == PathId.SONG:
+			prompt += "   ·   click to play for them"
+		return
+	match path:
+		PathId.STEEL:
+			prompt = "Click swing  ·  WASD  ·  E talk"
+		PathId.SONG:
+			prompt = "Click play  ·  get invited at the gate"
+		PathId.SPARK:
+			prompt = "R cast  ·  the book still bites"
+		PathId.FEATHER:
+			prompt = "F pickpocket anyone  ·  rob your way in"
+		_:
+			prompt = "WASD move  ·  mouse look"
 
 func _interact() -> void:
 	if path == PathId.NONE:
@@ -434,6 +647,14 @@ func _interact() -> void:
 		if _near_fairy():
 			fairy_talk = "Steel, song, or spark. Pick a gift. Or pick a pocket — I am not your mother."
 			return
+	var n := _nearest_npc()
+	if not n.is_empty():
+		var lines: Array = n["lines"]
+		var i: int = n["i"]
+		log_line = "%s\n%s" % [n["name"], lines[i % lines.size()]]
+		n["i"] = i + 1
+		fairy_talk = ""
+		return
 	fairy_talk = ""
 
 func _take(id: String) -> void:
@@ -442,14 +663,20 @@ func _take(id: String) -> void:
 			path = PathId.STEEL
 			fairy_talk = "Try not to die in the first sentence."
 			log_line = "The sword is wet. It does not mind."
+			if sword_view:
+				sword_view.visible = true
 		"song":
 			path = PathId.SONG
 			fairy_talk = "Smile when you lie. It's cheaper than a seal."
 			log_line = "The lute smells like someone else's feast."
+			if lute_view:
+				lute_view.visible = true
 		"spark":
 			path = PathId.SPARK
 			fairy_talk = "The book bites. Point it at problems."
 			log_line = "The pages are already warm."
+			if book_view:
+				book_view.visible = true
 	_dismiss_gifts()
 
 func _pocket() -> void:
@@ -463,9 +690,41 @@ func _pocket() -> void:
 		_dismiss_gifts()
 		return
 	if path == PathId.FEATHER:
+		var n := _nearest_npc()
+		if not n.is_empty() and not n["picked"]:
+			n["picked"] = true
+			coin += int(n["purse"])
+			log_line = "You lift %s's purse. They do not notice. Yet." % n["name"]
+			return
 		coin += 1
 		log_line = "A purse that was not watching you."
 
+func _build_viewmodels() -> void:
+	sword_view = _make_sword()
+	for c in sword_view.get_children():
+		if c is Label3D or c is OmniLight3D:
+			c.queue_free()
+	sword_view.position = Vector3(0.38, -0.28, -0.55)
+	sword_view.rotation_degrees = Vector3(12, 18, -28)
+	sword_view.scale = Vector3(0.35, 0.35, 0.35)
+	sword_view.visible = false
+	camera.add_child(sword_view)
+	lute_view = _make_lute()
+	for c in lute_view.get_children():
+		if c is Label3D or c is OmniLight3D:
+			c.queue_free()
+	lute_view.position = Vector3(0.32, -0.28, -0.5)
+	lute_view.scale = Vector3(0.55, 0.55, 0.55)
+	lute_view.visible = false
+	camera.add_child(lute_view)
+	book_view = _make_book()
+	for c in book_view.get_children():
+		if c is Label3D or c is OmniLight3D:
+			c.queue_free()
+	book_view.position = Vector3(0.28, -0.22, -0.48)
+	book_view.scale = Vector3(0.7, 0.7, 0.7)
+	book_view.visible = false
+	camera.add_child(book_view)
 func _dismiss_gifts() -> void:
 	for g in gifts:
 		if g["node"] and is_instance_valid(g["node"]):
