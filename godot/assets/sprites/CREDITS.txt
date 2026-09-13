@@ -1,0 +1,2 @@
+16-bit sprites for Rogue's Journal.
+Pixel sheets authored for this project. Nix, gifts, and yard NPCs.
