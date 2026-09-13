@@ -183,89 +183,53 @@ func _mesh_part(mesh: Mesh, mat: Material, pos := Vector3.ZERO, rot := Vector3.Z
 	mi.scale = scl
 	return mi
 
+func _spr(path: String, pixel_size: float) -> Sprite3D:
+	var s := Sprite3D.new()
+	s.texture = load(path)
+	s.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	s.pixel_size = pixel_size
+	s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	s.shaded = false
+	s.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
+	return s
+
 func _make_sword() -> Node3D:
 	var g := Node3D.new()
-	var loaded = load("res://assets/models/Sword.obj")
-	if loaded is Mesh:
-		var mi := MeshInstance3D.new()
-		mi.mesh = loaded
-		g.add_child(mi)
-		g.scale = Vector3(0.55, 0.55, 0.55)
-		g.rotation_degrees = Vector3(12, 35, 18)
-	else:
-		var blade := BoxMesh.new()
-		blade.size = Vector3(0.06, 1.15, 0.04)
-		g.add_child(_mesh_part(blade, _mat(Color(0.72, 0.76, 0.8), 0.28, 0.75), Vector3(0, 0.7, 0)))
-		var guard := BoxMesh.new()
-		guard.size = Vector3(0.32, 0.05, 0.08)
-		g.add_child(_mesh_part(guard, _mat(Color(0.55, 0.42, 0.2), 0.4, 0.5), Vector3(0, 0.16, 0)))
-		var hilt := BoxMesh.new()
-		hilt.size = Vector3(0.07, 0.22, 0.07)
-		g.add_child(_mesh_part(hilt, _mat(Color(0.22, 0.14, 0.08), 0.85), Vector3(0, 0.02, 0)))
-	_tag(g, "Sword", 1.35)
+	var s := _spr("res://assets/sprites/sword.png", 0.012)
+	s.position.y = 0.75
+	g.add_child(s)
+	_tag(g, "Sword", 1.55)
 	var glow := OmniLight3D.new()
 	glow.light_color = Color(0.7, 0.75, 0.82)
-	glow.light_energy = 1.4
-	glow.omni_range = 5.0
+	glow.light_energy = 1.2
+	glow.omni_range = 4.5
 	g.add_child(glow)
 	return g
 
 func _make_lute() -> Node3D:
 	var g := Node3D.new()
-	var bowl := SphereMesh.new()
-	bowl.radius = 0.2
-	bowl.height = 0.28
-	g.add_child(_mesh_part(bowl, _mat(Color(0.48, 0.28, 0.12), 0.55, 0.08), Vector3.ZERO, Vector3.ZERO, Vector3(1.2, 0.55, 1.05)))
-	var hole := CylinderMesh.new()
-	hole.top_radius = 0.055
-	hole.bottom_radius = 0.055
-	hole.height = 0.02
-	g.add_child(_mesh_part(hole, _mat(Color(0.08, 0.05, 0.03)), Vector3(0, 0.08, 0.02), Vector3(90, 0, 0)))
-	var neck := BoxMesh.new()
-	neck.size = Vector3(0.055, 0.05, 0.62)
-	g.add_child(_mesh_part(neck, _mat(Color(0.28, 0.16, 0.07), 0.8), Vector3(0, 0.04, -0.46)))
-	var head := BoxMesh.new()
-	head.size = Vector3(0.1, 0.04, 0.14)
-	g.add_child(_mesh_part(head, _mat(Color(0.22, 0.12, 0.05)), Vector3(0, 0.06, -0.8)))
-	for i in 4:
-		var peg := SphereMesh.new()
-		peg.radius = 0.018
-		peg.height = 0.036
-		g.add_child(_mesh_part(peg, _mat(Color(0.7, 0.62, 0.4), 0.4, 0.3), Vector3(-0.03 + i * 0.02, 0.09, -0.78)))
-		var string := CylinderMesh.new()
-		string.top_radius = 0.004
-		string.bottom_radius = 0.004
-		string.height = 0.72
-		g.add_child(_mesh_part(string, _mat(Color(0.85, 0.8, 0.65)), Vector3(-0.03 + i * 0.02, 0.09, -0.38), Vector3(90, 0, 0)))
-	g.rotation_degrees = Vector3(-8, 40, 12)
-	_tag(g, "Lute", 0.7)
+	var s := _spr("res://assets/sprites/lute.png", 0.011)
+	s.position.y = 0.45
+	g.add_child(s)
+	_tag(g, "Lute", 0.95)
 	var glow := OmniLight3D.new()
 	glow.light_color = Color(0.77, 0.64, 0.35)
-	glow.light_energy = 1.3
-	glow.omni_range = 5.0
+	glow.light_energy = 1.2
+	glow.omni_range = 4.5
 	g.add_child(glow)
 	return g
 
 func _make_book() -> Node3D:
 	var g := Node3D.new()
-	var cover := BoxMesh.new()
-	cover.size = Vector3(0.34, 0.06, 0.46)
-	g.add_child(_mesh_part(cover, _mat(Color(0.28, 0.08, 0.1), 0.7, 0.05, Color(0.45, 0.12, 0.05, 1)), Vector3(0, 0.03, 0)))
-	var pages := BoxMesh.new()
-	pages.size = Vector3(0.3, 0.045, 0.42)
-	g.add_child(_mesh_part(pages, _mat(Color(0.85, 0.78, 0.62), 0.95), Vector3(0.01, 0.05, 0)))
-	var spine := BoxMesh.new()
-	spine.size = Vector3(0.05, 0.08, 0.46)
-	g.add_child(_mesh_part(spine, _mat(Color(0.18, 0.06, 0.07), 0.65, 0.1), Vector3(-0.16, 0.04, 0)))
-	var clasp := BoxMesh.new()
-	clasp.size = Vector3(0.06, 0.02, 0.08)
-	g.add_child(_mesh_part(clasp, _mat(Color(0.72, 0.58, 0.28), 0.35, 0.7), Vector3(0.16, 0.08, 0)))
-	g.rotation_degrees = Vector3(0, -28, 0)
-	_tag(g, "Spellbook", 0.55)
+	var s := _spr("res://assets/sprites/book.png", 0.011)
+	s.position.y = 0.4
+	g.add_child(s)
+	_tag(g, "Spellbook", 0.85)
 	var glow := OmniLight3D.new()
 	glow.light_color = Color(0.83, 0.4, 0.18)
-	glow.light_energy = 1.8
-	glow.omni_range = 5.5
+	glow.light_energy = 1.6
+	glow.omni_range = 5.0
 	g.add_child(glow)
 	return g
 
@@ -304,50 +268,15 @@ func _add_npc(id: String, npc_name: String, tunic: Color, pos: Vector3, rot: flo
 	var g := Node3D.new()
 	g.position = pos
 	g.rotation.y = rot
-	var skin := _mat(Color(0.76, 0.58, 0.42), 0.9)
-	var cloth := _mat(tunic, 0.92)
-	var dark := _mat(Color(0.16, 0.13, 0.09), 0.95)
-	var torso := BoxMesh.new()
-	torso.size = Vector3(0.48, 0.72, 0.28)
-	g.add_child(_mesh_part(torso, cloth, Vector3(0, 1.05, 0)))
-	var hips := BoxMesh.new()
-	hips.size = Vector3(0.44, 0.22, 0.26)
-	g.add_child(_mesh_part(hips, dark, Vector3(0, 0.62, 0)))
-	var leg := BoxMesh.new()
-	leg.size = Vector3(0.16, 0.55, 0.16)
-	g.add_child(_mesh_part(leg, dark, Vector3(-0.12, 0.28, 0)))
-	g.add_child(_mesh_part(leg, dark, Vector3(0.12, 0.28, 0)))
-	var arm := BoxMesh.new()
-	arm.size = Vector3(0.12, 0.55, 0.12)
-	g.add_child(_mesh_part(arm, cloth, Vector3(-0.32, 1.0, 0)))
-	g.add_child(_mesh_part(arm, cloth, Vector3(0.32, 1.0, 0)))
-	var head := BoxMesh.new()
-	head.size = Vector3(0.26, 0.3, 0.24)
-	g.add_child(_mesh_part(head, skin, Vector3(0, 1.55, 0)))
-	if guard:
-		var helm := BoxMesh.new()
-		helm.size = Vector3(0.3, 0.16, 0.3)
-		g.add_child(_mesh_part(helm, _mat(Color(0.35, 0.38, 0.42), 0.4, 0.6), Vector3(0, 1.74, 0)))
-		var spear := CylinderMesh.new()
-		spear.top_radius = 0.02
-		spear.bottom_radius = 0.025
-		spear.height = 1.8
-		g.add_child(_mesh_part(spear, _mat(Color(0.4, 0.3, 0.18)), Vector3(0.38, 1.1, 0.05)))
-	if id == "pell":
-		var veil := BoxMesh.new()
-		veil.size = Vector3(0.32, 0.28, 0.08)
-		g.add_child(_mesh_part(veil, _mat(Color(0.1, 0.1, 0.14)), Vector3(0, 1.58, -0.12)))
-	if id == "ralf":
-		var jug := CylinderMesh.new()
-		jug.top_radius = 0.05
-		jug.bottom_radius = 0.06
-		jug.height = 0.18
-		g.add_child(_mesh_part(jug, _mat(Color(0.29, 0.22, 0.13)), Vector3(0.28, 0.95, 0.12)))
-	if id == "hob":
-		var bag := BoxMesh.new()
-		bag.size = Vector3(0.18, 0.16, 0.1)
-		g.add_child(_mesh_part(bag, _mat(Color(0.22, 0.16, 0.09)), Vector3(0.3, 0.9, 0)))
-	_tag(g, npc_name, 2.05)
+	var sheet := "res://assets/sprites/%s.png" % id
+	if id == "cole":
+		sheet = "res://assets/sprites/bren.png"
+	var s := _spr(sheet, 0.012)
+	s.position.y = 0.88
+	if id == "cole":
+		s.flip_h = true
+	g.add_child(s)
+	_tag(g, npc_name, 1.95)
 	add_child(g)
 	npcs.append({ "id": id, "name": npc_name, "node": g, "lines": lines, "purse": 4, "picked": false, "i": 0 })
 
@@ -436,7 +365,7 @@ func _build_hud() -> void:
 	col.add_child(blurb)
 
 	wake_btn = Button.new()
-	wake_btn.text = "Wake in the mud"
+	wake_btn.text = "Click anywhere — wake in the mud"
 	wake_btn.custom_minimum_size = Vector2(280, 48)
 	wake_btn.pressed.connect(_on_wake)
 	col.add_child(wake_btn)
@@ -491,6 +420,8 @@ func _set_phase_title() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _on_wake() -> void:
+	if phase != Phase.TITLE:
+		return
 	phase = Phase.WAKE
 	wake_t = 0.0
 	title_box.visible = false
@@ -501,6 +432,10 @@ func _on_wake() -> void:
 
 func _input(event: InputEvent) -> void:
 	if phase == Phase.TITLE:
+		var click: bool = event is InputEventMouseButton and event.pressed
+		var key: bool = event is InputEventKey and event.pressed and not event.echo
+		if click or key:
+			_on_wake()
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		yaw -= event.relative.x * look_sens
@@ -700,29 +635,19 @@ func _pocket() -> void:
 		log_line = "A purse that was not watching you."
 
 func _build_viewmodels() -> void:
-	sword_view = _make_sword()
-	for c in sword_view.get_children():
-		if c is Label3D or c is OmniLight3D:
-			c.queue_free()
-	sword_view.position = Vector3(0.38, -0.28, -0.55)
-	sword_view.rotation_degrees = Vector3(12, 18, -28)
-	sword_view.scale = Vector3(0.35, 0.35, 0.35)
+	sword_view = _spr("res://assets/sprites/sword.png", 0.004)
+	sword_view.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	sword_view.position = Vector3(0.32, -0.22, -0.48)
 	sword_view.visible = false
 	camera.add_child(sword_view)
-	lute_view = _make_lute()
-	for c in lute_view.get_children():
-		if c is Label3D or c is OmniLight3D:
-			c.queue_free()
-	lute_view.position = Vector3(0.32, -0.28, -0.5)
-	lute_view.scale = Vector3(0.55, 0.55, 0.55)
+	lute_view = _spr("res://assets/sprites/lute.png", 0.0038)
+	lute_view.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	lute_view.position = Vector3(0.3, -0.2, -0.46)
 	lute_view.visible = false
 	camera.add_child(lute_view)
-	book_view = _make_book()
-	for c in book_view.get_children():
-		if c is Label3D or c is OmniLight3D:
-			c.queue_free()
-	book_view.position = Vector3(0.28, -0.22, -0.48)
-	book_view.scale = Vector3(0.7, 0.7, 0.7)
+	book_view = _spr("res://assets/sprites/book.png", 0.0036)
+	book_view.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	book_view.position = Vector3(0.28, -0.18, -0.44)
 	book_view.visible = false
 	camera.add_child(book_view)
 func _dismiss_gifts() -> void:
