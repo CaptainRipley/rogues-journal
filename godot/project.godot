@@ -1,0 +1,28 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Rogue's Journal"
+config/description="Wake in the mud. Nix has four gifts. Aldric took her."
+run/main_scene="res://scenes/game.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://assets/nix.png"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.web="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+textures/vram_compression/import_s3tc_bptc=true
+anti_aliasing/quality/msaa_3d=0
+environment/defaults/default_clear_color=Color(0.04, 0.047, 0.055, 1)

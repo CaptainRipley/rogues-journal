@@ -1,10 +1,20 @@
 # Rogue's Journal
 
-Working title. First-person medieval RPG: journal story + 3D yard.
+Dark medieval first-person RPG. The king took your wife. Nix has four gifts.
 
-The king took your wife. You walk to his feast.
+**Repo:** [github.com/CaptainRipley/rogues-journal](https://github.com/CaptainRipley/rogues-journal)
 
-**Play 3D:** `prototype/world.html` — WASD, jump, sword, spark, talk, pickpocket  
-**Play journal:** `prototype/index.html`
+This is the source, not a Steam page. There is no store link yet.
 
-Repo: https://github.com/CaptainRipley/rogues-journal
+## Play on your PC (Godot)
+
+1. Download [Godot 4.7.2](https://godotengine.org/download/archive/4.7.2-stable/) (standard, not .NET).
+2. Open the `godot/` folder in this repo (`project.godot`).
+3. Press Play (F5).
+4. Click **Wake in the mud**.
+
+E take a gift / talk. F pickpocket Nix. WASD, mouse look, Space jump.
+
+## What this is
+
+The opening ditch only. Cinematic comes later. Four paths: sword, lute, spellbook, feather hands.
