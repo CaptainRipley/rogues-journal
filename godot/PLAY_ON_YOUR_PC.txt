@@ -1,7 +1,17 @@
 Rogue's Journal — run on your computer
+======================================
 
-Godot 4.7.2 (standard, not .NET):
-https://godotengine.org/download/archive/4.7.2-stable/
+You need Godot 4.7 (standard, not .NET):
+https://godotengine.org/download/4.7.2/
 
-Open the folder that contains project.godot. Press Play (F5).
-Click Wake in the mud.
+1. Unzip this folder.
+2. Open Godot 4.7.
+3. Import / open the folder that contains project.godot.
+4. Press Play (F5).
+
+Click "Wake in the mud". Nix is the marsh fairy.
+E take a gift / talk. F pickpocket her.
+
+WASD move, mouse look, Space jump.
+
+This is the ditch slice, not the full castle yet.

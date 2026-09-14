@@ -17,4 +17,4 @@ E take a gift / talk. F pickpocket Nix. WASD, mouse look, Space jump.
 
 ## What this is
 
-The opening ditch only. Cinematic comes later. Four paths: sword, lute, spellbook, feather hands.
+Opening ditch, cobblestone town, forest, and the king's gate. Cinematic comes later. Four paths: sword, lute, spellbook, feather hands.

@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night: #0d0c0b;
+  --color-ink: #1a1410;
+  --color-page: #e8d7b8;
+  --color-page-dim: #cbb89a;
+  --color-muted: #8a7a62;
+  --color-gold: #c4a45a;
+  --color-blood: #6b2b24;
+  --color-slate: #2a3036;
+  --color-surface: rgba(18, 12, 8, 0.88);
+  --color-border: #5a4630;
+  --font-display: "Cormorant Garamond", "Palatino Linotype", Palatino, serif;
+  --font-body: "Source Serif 4", "Palatino Linotype", Georgia, serif;
+  --radius: 0.25rem;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body,
+  #app {
+    height: 100%;
+    background: var(--color-night);
+    color: var(--color-page);
+  }
+}

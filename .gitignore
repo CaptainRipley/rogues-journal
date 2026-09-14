@@ -1,0 +1,13 @@
+node_modules/
+dist/
+artifacts/
+.vercel/
+.tanstack/
+.grok/
+.project_id
+.node_modules.lock
+*.log
+.DS_Store
+godot/.godot/
+godot/*.tmp
+public/__grok/
