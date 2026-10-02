@@ -172,17 +172,17 @@ func _build_castle_gate() -> void:
 	_castle_piece(src, "Gate_Door", Vector3(-0.7, 0, z + 0.15), yaw, S)
 	_castle_piece(src, "Gate_Door", Vector3(0.7, 0, z + 0.15), yaw + PI, S)
 	for side in [-1.0, 1.0]:
-		var tx := side * 6.6
+		var tx: float = float(side) * 6.6
 		_castle_piece(src, "Tower_Mid", Vector3(tx, 0, z), 0.0, S)
 		_castle_piece(src, "Tower_top_1", Vector3(tx, 2.0 * S, z), 0.0, S)
 		_castle_piece(src, "Roof_Cone", Vector3(tx, 4.15 * S, z), 0.0, S)
 		_torch(Vector3(tx + side * 1.1, 3.4, z + 1.3), Color(1.0, 0.54, 0.2), 2.2)
 		for i in 3:
-			var wx := side * (12.2 + i * 10.0)
+			var wx: float = float(side) * (12.2 + float(i) * 10.0)
 			var wall := "Wall_2x4_ruined" if i == 2 else "Wall_2x4"
 			_castle_piece(src, wall, Vector3(wx, 0, z), yaw, S)
 			_castle_piece(src, "Wall_2x4_walkway", Vector3(wx, 2.0 * S, z), yaw, S)
-		var ex := side * 38.0
+		var ex: float = float(side) * 38.0
 		_castle_piece(src, "Tower_Mid", Vector3(ex, 0, z), 0.0, S)
 		_castle_piece(src, "Tower_top_1", Vector3(ex, 2.0 * S, z), 0.0, S)
 		_castle_piece(src, "Roof_Cone", Vector3(ex, 4.15 * S, z), 0.0, S)
@@ -270,8 +270,8 @@ func _plant_forest() -> void:
 	for h in yard:
 		var toward := -1.0 if h[0] < 0.0 else 1.0
 		for oz in [-h[3] * 0.28, h[3] * 0.28]:
-			var bx := h[0] + toward * (h[2] * 0.5 + 1.15)
-			var bz := h[1] + oz
+			var bx: float = float(h[0]) + toward * (float(h[2]) * 0.5 + 1.15)
+			var bz: float = float(h[1]) + float(oz)
 			if _forest_blocked(bx, bz, 0.95):
 				continue
 			_psx_tree("bush", Vector3(bx, 0, bz), rng)
@@ -622,27 +622,27 @@ func _add_gift_node(id: String, node: Node3D, pos: Vector3, hint: String) -> voi
 	gifts.append({ "id": id, "node": node, "hint": hint })
 
 func _build_npcs() -> void:
-	_add_npc("hob", "Hob", Color(0.29, 0.23, 0.16), Vector3(1.6, 0, 5.2), 0.4, false, [
+	_add_npc("hob", "Hob", Vector3(1.6, 0, 5.2), 0.4, false, [
 		"Road tax. Feast night. Double, unless you're expected.",
 		"If anyone asks, you were a priest. I'm a businessman.",
 	])
-	_add_npc("marta", "Marta", Color(0.42, 0.16, 0.16), Vector3(4.8, 0, 6.2), -1.2, false, [
+	_add_npc("marta", "Marta", Vector3(4.8, 0, 6.2), -1.2, false, [
 		"They named this cup after him. The ale tastes like a policy.",
 		"East gallery, first course. That's where he parks what he stole.",
 	])
-	_add_npc("bren", "Guard Bren", Color(0.23, 0.27, 0.31), Vector3(-5.5, 0, -17.5), 0.0, true, [
+	_add_npc("bren", "Guard Bren", Vector3(-5.5, 0, -17.5), 0.0, true, [
 		"Kitchen door unlatches at the second bell. That's not a gift.",
 		"Keep that iron in its hole. Feast night is noisy enough.",
 	])
-	_add_npc("cole", "Guard Cole", Color(0.23, 0.27, 0.31), Vector3(5.5, 0, -17.5), 3.14, true, [
+	_add_npc("cole", "Guard Cole", Vector3(5.5, 0, -17.5), 3.14, true, [
 		"Cousin of a baron, are you? They all are, tonight.",
 		"The swan is already burnt. His Generous Majesty will not notice.",
 	])
-	_add_npc("pell", "Sister Pell", Color(0.16, 0.16, 0.22), Vector3(-5.2, 0, -2.2), 1.1, false, [
+	_add_npc("pell", "Sister Pell", Vector3(-5.2, 0, -2.2), 1.1, false, [
 		"I keep a key because I do not trust doors that belong to kings.",
 		"Mara Venn has a spine. Try not to rescue her like furniture.",
 	])
-	_add_npc("ralf", "Drunk Ralf", Color(0.29, 0.29, 0.16), Vector3(4.2, 0, 11.4), 2.0, false, [
+	_add_npc("ralf", "Drunk Ralf", Vector3(4.2, 0, 11.4), 2.0, false, [
 		"I am Cousin Ralf of the eastern orchards. Ask anyone. Don't.",
 		"If you need a name at the gate, mine is already ruined. Be my guest.",
 	])
@@ -701,67 +701,90 @@ func _add_hound(pos: Vector3) -> void:
 		"lines": ["The hound wheezes like a bellows that filed for retirement."]
 	})
 
-func _add_npc(id: String, npc_name: String, tunic: Color, pos: Vector3, rot: float, guard: bool, lines: Array) -> void:
-	var g := _rig_person(tunic, Color(0.69, 0.54, 0.38), guard, id)
+func _add_npc(id: String, npc_name: String, pos: Vector3, rot: float, guard: bool, lines: Array) -> void:
+	var g := _rig_person(id)
 	g.position = pos
 	g.rotation.y = rot
-	_tag(g, npc_name, 1.95)
 	add_child(g)
+	var top := _mesh_top(g)
+	_tag(g, npc_name, top + 0.22)
+	var bob: Node3D = g.get_meta("body")
 	npcs.append({
 		"id": id, "name": npc_name, "node": g,
-		"armL": g.get_meta("armL"), "armR": g.get_meta("armR"),
-		"legL": g.get_meta("legL"), "legR": g.get_meta("legR"),
-		"torso": g.get_meta("torso"),
+		"body": bob, "body_y": bob.position.y,
 		"lines": lines, "purse": 4, "picked": false, "i": 0,
 		"home": pos, "tgt": pos, "wander": randf() * 2.0, "guard": guard, "ally": false, "kind": "person"
 	})
 
-func _rig_person(tunic: Color, skin: Color, guard: bool, extras: String) -> Node3D:
-	var who := extras
+func _npc_mesh(id: String) -> String:
+	match id:
+		"hob":
+			return "res://assets/psx-characters/peasant.glb"
+		"ralf":
+			return "res://assets/psx-characters/peasant_blonde.glb"
+		"marta":
+			return "res://assets/psx-characters/bartender.glb"
+		"pell":
+			return "res://assets/psx-characters/nun.glb"
+		"bren", "cole":
+			return "res://assets/psx-characters/inquisitor.glb"
+		_:
+			push_error("No PSX mesh for NPC %s" % id)
+			return "res://assets/psx-characters/peasant.glb"
+
+func _rig_person(id: String) -> Node3D:
 	var g := Node3D.new()
-	var hips := Node3D.new()
-	hips.position.y = 0.9
-	g.add_child(hips)
-	var torso := Node3D.new()
-	torso.position.y = 0.14
-	hips.add_child(torso)
-	torso.add_child(_doll_spr("res://assets/sprites/doll/%s_torso.png" % who, 0.018, 0.1))
-	torso.add_child(_doll_spr("res://assets/sprites/doll/%s_head.png" % who, 0.018, 0.48))
-	var armL := Node3D.new()
-	armL.position = Vector3(-0.2, 0.22, 0.03)
-	armL.add_child(_doll_spr("res://assets/sprites/doll/%s_arm.png" % who, 0.016, -0.22))
-	var armR := Node3D.new()
-	armR.position = Vector3(0.2, 0.22, 0.03)
-	armR.add_child(_doll_spr("res://assets/sprites/doll/%s_arm_r.png" % who, 0.016, -0.22))
-	if guard and ResourceLoader.exists("res://assets/sprites/doll/%s_spear.png" % who):
-		armR.add_child(_doll_spr("res://assets/sprites/doll/%s_spear.png" % who, 0.014, -0.2))
-	torso.add_child(armL)
-	torso.add_child(armR)
-	var legL := Node3D.new()
-	legL.position = Vector3(-0.09, 0, 0)
-	legL.add_child(_doll_spr("res://assets/sprites/doll/%s_leg.png" % who, 0.016, -0.26))
-	var legR := Node3D.new()
-	legR.position = Vector3(0.09, 0, 0)
-	legR.add_child(_doll_spr("res://assets/sprites/doll/%s_leg_r.png" % who, 0.016, -0.26))
-	hips.add_child(legL)
-	hips.add_child(legR)
-	g.set_meta("armL", armL)
-	g.set_meta("armR", armR)
-	g.set_meta("legL", legL)
-	g.set_meta("legR", legR)
-	g.set_meta("torso", torso)
+	var bob := Node3D.new()
+	bob.name = "Bob"
+	g.add_child(bob)
+	var packed: PackedScene = load(_npc_mesh(id)) as PackedScene
+	if packed == null:
+		push_error("Missing PSX mesh for %s" % id)
+		g.set_meta("body", bob)
+		return g
+	var body: Node3D = packed.instantiate() as Node3D
+	body.name = "Mesh"
+	_psx_character(body)
+	bob.add_child(body)
+	g.set_meta("body", bob)
 	return g
 
-func _doll_spr(path: String, pixel_h: float, y: float) -> Sprite3D:
-	var s := Sprite3D.new()
-	s.texture = load(path)
-	s.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	s.pixel_size = 0.016
-	s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
-	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	s.shaded = false
-	s.position.y = y
-	return s
+func _psx_character(n: Node) -> void:
+	if n is MeshInstance3D:
+		var mi: MeshInstance3D = n as MeshInstance3D
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if mi.mesh:
+			for i in mi.mesh.get_surface_count():
+				var src: Material = mi.get_active_material(i)
+				var m := StandardMaterial3D.new()
+				if src is StandardMaterial3D:
+					var painted: StandardMaterial3D = src as StandardMaterial3D
+					m.albedo_texture = painted.albedo_texture
+					m.albedo_color = painted.albedo_color
+				m.roughness = 1.0
+				m.metallic = 0.0
+				m.metallic_specular = 0.0
+				m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+				m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+				m.normal_enabled = false
+				m.rim_enabled = false
+				m.clearcoat_enabled = false
+				mi.set_surface_override_material(i, m)
+	for c in n.get_children():
+		_psx_character(c)
+
+func _mesh_top(root: Node) -> float:
+	var top := 1.7
+	var stack: Array[Node] = [root]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh:
+			var mi: MeshInstance3D = n as MeshInstance3D
+			var world: AABB = mi.global_transform * mi.get_aabb()
+			top = maxf(top, world.position.y + world.size.y - root.global_position.y)
+		for c in n.get_children():
+			stack.append(c)
+	return top
 
 func _forge_sword() -> Node3D:
 	var g := Node3D.new()
@@ -1283,7 +1306,7 @@ func _anim_npcs(delta: float) -> void:
 		var home: Vector3 = n["home"]
 		var tgt: Vector3 = n["tgt"]
 		n["sit"] = float(n.get("sit", 0.0)) - delta
-		var freeze := (hob_node != "" and str(n["id"]) == "hob") or (dog_node != "" and str(n["id"]) == "bramble") or (n.get("kind", "") == "hound" and float(n.get("sit", 0.0)) > 0.0)
+		var freeze: bool = (hob_node != "" and str(n["id"]) == "hob") or (dog_node != "" and str(n["id"]) == "bramble") or (n.get("kind", "") == "hound" and float(n.get("sit", 0.0)) > 0.0)
 		if freeze:
 			tgt = n["node"].global_position
 			n["tgt"] = tgt
@@ -1297,12 +1320,12 @@ func _anim_npcs(delta: float) -> void:
 			n["tgt"] = tgt
 		var pos: Vector3 = n["node"].global_position
 		var d := Vector3(tgt.x - pos.x, 0.0, tgt.z - pos.z)
-		var moving := (not freeze) and d.length() > 0.2
+		var moving: bool = (not freeze) and d.length() > 0.2
 		if moving:
 			var sp := 3.0 if n.get("kind", "") == "critter" else (0.7 if n.get("kind", "") == "hound" else 1.2)
 			n["node"].global_position = pos + d.normalized() * sp * delta
 		if n.get("kind", "") == "hound":
-			var sitting := freeze or float(n.get("sit", 0.0)) > 0.0
+			var sitting: bool = freeze or float(n.get("sit", 0.0)) > 0.0
 			if n.get("sitSpr"):
 				n["sitSpr"].visible = sitting
 			if n.get("walkSpr"):
@@ -1310,13 +1333,11 @@ func _anim_npcs(delta: float) -> void:
 		var to_cam: Vector3 = player.global_position - n["node"].global_position
 		n["node"].rotation.y = atan2(to_cam.x, to_cam.z)
 		var t := fairy_t * (9.0 if moving else 2.4) + home.x
-		var a := 0.7 if moving else 0.1
-		if n.get("legL"):
-			n["legL"].rotation.x = sin(t) * a
-			n["legR"].rotation.x = sin(t + PI) * a
-			n["armL"].rotation.x = sin(t + PI) * a * 0.85
-			n["armR"].rotation.x = sin(t) * a * (0.28 if n["guard"] else 0.85)
-			n["torso"].rotation.z = sin(t * 0.5) * (0.06 if moving else 0.025)
+		if n.get("body"):
+			var body: Node3D = n["body"]
+			var base_y: float = float(n.get("body_y", 0.0))
+			body.position.y = base_y + sin(t) * (0.045 if moving else 0.012)
+			body.rotation.z = sin(t * 0.5) * (0.05 if moving else 0.018)
 
 func _apply_look() -> void:
 	player.rotation.y = yaw

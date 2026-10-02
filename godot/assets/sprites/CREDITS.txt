@@ -1,2 +1,3 @@
 16-bit sprites for Rogue's Journal.
-Pixel sheets authored for this project. Nix, gifts, and yard NPCs.
+Pixel sheets authored for this project. Nix, gifts, critters, and the hound.
+Town humans in the Godot scene use the PSX meshes in res://assets/psx-characters/.

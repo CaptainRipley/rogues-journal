@@ -2,6 +2,12 @@
 
 Use original work or licensed packs. No rips.
 
+## In the Godot scene
+
+- Opening woods: PS1 Haunted/dreamer Nature Pack — see `godot/assets/psx-nature/CREDITS.md`
+- Town humans (Hob, Marta, Bren, Cole, Pell, Ralf): Nocturnal Watch PSX characters (CC0, toboas) — see `godot/assets/psx-characters/CREDITS.md`
+- Nix stays the `nix.png` billboard
+
 Want dark castle / wet village, not sunny farm tiles.
 
 ## Packs that match
