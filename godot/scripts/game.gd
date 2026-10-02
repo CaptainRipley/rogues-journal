@@ -7,6 +7,22 @@ const SPEED := 8.8
 const JUMP_V := 7.4
 const GRAVITY := 18.0
 const DITCH := Vector3(0.0, 0.0, 28.8)
+# Opening woods. Seed stays 1337. Clear = keep-out from street, yards, ditch, and gate.
+# Cap = max crown radius; keep each cap under its clear distance.
+const FOREST_SEED := 1337
+const FOREST_TREE_TARGET := 1900
+const FOREST_TREE_TRIES := 22000
+const FOREST_BUSH_TARGET := 1600
+const FOREST_BUSH_TRIES := 18000
+const FOREST_TREE_GAP := 2.65
+const FOREST_BUSH_GAP := 1.4
+const FOREST_DEAD_MIX := 0.24
+const FOREST_PINE_CLEAR := 5.6
+const FOREST_DEAD_CLEAR := 4.4
+const FOREST_BUSH_CLEAR := 1.05
+const FOREST_PINE_CAP := 5.2
+const FOREST_DEAD_CAP := 4.0
+const FOREST_BUSH_CAP := 0.95
 
 var phase: Phase = Phase.TITLE
 var path: PathId = PathId.NONE
@@ -172,17 +188,17 @@ func _build_castle_gate() -> void:
 	_castle_piece(src, "Gate_Door", Vector3(-0.7, 0, z + 0.15), yaw, S)
 	_castle_piece(src, "Gate_Door", Vector3(0.7, 0, z + 0.15), yaw + PI, S)
 	for side in [-1.0, 1.0]:
-		var tx := side * 6.6
+		var tx: float = side * 6.6
 		_castle_piece(src, "Tower_Mid", Vector3(tx, 0, z), 0.0, S)
 		_castle_piece(src, "Tower_top_1", Vector3(tx, 2.0 * S, z), 0.0, S)
 		_castle_piece(src, "Roof_Cone", Vector3(tx, 4.15 * S, z), 0.0, S)
 		_torch(Vector3(tx + side * 1.1, 3.4, z + 1.3), Color(1.0, 0.54, 0.2), 2.2)
 		for i in 3:
-			var wx := side * (12.2 + i * 10.0)
+			var wx: float = side * (12.2 + i * 10.0)
 			var wall := "Wall_2x4_ruined" if i == 2 else "Wall_2x4"
 			_castle_piece(src, wall, Vector3(wx, 0, z), yaw, S)
 			_castle_piece(src, "Wall_2x4_walkway", Vector3(wx, 2.0 * S, z), yaw, S)
-		var ex := side * 38.0
+		var ex: float = side * 38.0
 		_castle_piece(src, "Tower_Mid", Vector3(ex, 0, z), 0.0, S)
 		_castle_piece(src, "Tower_top_1", Vector3(ex, 2.0 * S, z), 0.0, S)
 		_castle_piece(src, "Roof_Cone", Vector3(ex, 4.15 * S, z), 0.0, S)
@@ -223,38 +239,49 @@ func _forest_blocked(x: float, z: float, r := 0.0) -> bool:
 		return true
 	return false
 
+func _forest_cell(x: float, z: float, gap: float) -> String:
+	var cell := gap * 0.65
+	return "%d,%d" % [int(round(x / cell)), int(round(z / cell))]
+
 func _plant_forest() -> void:
 	_plant_grass_ground()
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 1337
-	var placed: Array[Vector2] = []
+	rng.seed = FOREST_SEED
+	var tree_occ := {}
 	var n := 0
 	var tries := 0
-	var occ := {}
-	while n < 1400 and tries < 12000:
+	while n < FOREST_TREE_TARGET and tries < FOREST_TREE_TRIES:
 		tries += 1
 		var x := (rng.randf() - 0.5) * 152.0
 		var z := (rng.randf() - 0.5) * 140.0 + 6.0
-		var r := rng.randf()
-		var kind := "pine"
-		if r < 0.18:
-			kind = "bush"
-		elif r < 0.38:
-			kind = "dead"
+		var kind := "dead" if rng.randf() < FOREST_DEAD_MIX else "pine"
 		var in_town := absf(x) < 15.5 and z > -16.5 and z < 25.8
-		if in_town and kind != "bush":
+		if in_town:
 			continue
-		var rad := 1.05 if kind == "bush" else (6.2 if kind == "dead" else 8.0)
+		var rad := FOREST_DEAD_CLEAR if kind == "dead" else FOREST_PINE_CLEAR
 		if _forest_blocked(x, z, rad):
 			continue
-		var min_d := 2.4 if kind == "bush" else 4.2
-		var key := "%d,%d" % [int(round(x / (min_d * 0.65))), int(round(z / (min_d * 0.65)))]
-		if occ.has(key):
+		var key := _forest_cell(x, z, FOREST_TREE_GAP)
+		if tree_occ.has(key):
 			continue
-		occ[key] = true
+		tree_occ[key] = true
 		_psx_tree(kind, Vector3(x, 0, z), rng)
-		placed.append(Vector2(x, z))
 		n += 1
+	var bush_occ := {}
+	var bushes := 0
+	var bush_tries := 0
+	while bushes < FOREST_BUSH_TARGET and bush_tries < FOREST_BUSH_TRIES:
+		bush_tries += 1
+		var x := (rng.randf() - 0.5) * 152.0
+		var z := (rng.randf() - 0.5) * 140.0 + 6.0
+		if _forest_blocked(x, z, FOREST_BUSH_CLEAR):
+			continue
+		var key := _forest_cell(x, z, FOREST_BUSH_GAP)
+		if bush_occ.has(key):
+			continue
+		bush_occ[key] = true
+		_psx_tree("bush", Vector3(x, 0, z), rng)
+		bushes += 1
 	var yard := [
 		[-9.2, 21.5, 7.2, 6.2],
 		[-9.2, 14.2, 7.2, 6.4],
@@ -270,8 +297,8 @@ func _plant_forest() -> void:
 	for h in yard:
 		var toward := -1.0 if h[0] < 0.0 else 1.0
 		for oz in [-h[3] * 0.28, h[3] * 0.28]:
-			var bx := h[0] + toward * (h[2] * 0.5 + 1.15)
-			var bz := h[1] + oz
+			var bx: float = h[0] + toward * (h[2] * 0.5 + 1.15)
+			var bz: float = h[1] + oz
 			if _forest_blocked(bx, bz, 0.95):
 				continue
 			_psx_tree("bush", Vector3(bx, 0, bz), rng)
@@ -397,16 +424,17 @@ func _psx_card(mat: Material, pos: Vector3, w: float, h: float, yaw: float) -> v
 func _psx_tree(kind: String, pos: Vector3, rng: RandomNumberGenerator) -> void:
 	if kind == "bush" and haunted_bushes.size() > 0:
 		var inst := haunted_bushes[rng.randi() % haunted_bushes.size()].instantiate() as Node3D
-		_fit_plant(inst, pos, 1.8 + rng.randf() * 0.6, rng)
+		_fit_plant(inst, pos, 1.8 + rng.randf() * 0.6, rng, FOREST_BUSH_CAP)
 		return
 	if haunted_trees.size() > 0:
 		var inst := haunted_trees[rng.randi() % haunted_trees.size()].instantiate() as Node3D
 		var h := 9.0 if kind == "dead" else 12.0
-		_fit_plant(inst, pos, h + rng.randf() * 3.0, rng)
+		var cap := FOREST_DEAD_CAP if kind == "dead" else FOREST_PINE_CAP
+		_fit_plant(inst, pos, h + rng.randf() * 3.0, rng, cap)
 		return
 	if kind == "pine" and pine_scene:
 		var inst := pine_scene.instantiate() as Node3D
-		_fit_plant(inst, pos, 10.0 + rng.randf() * 4.0, rng)
+		_fit_plant(inst, pos, 10.0 + rng.randf() * 4.0, rng, FOREST_PINE_CAP)
 
 func _flatten_xz(n: Node) -> void:
 	if n is Node3D:
@@ -416,7 +444,7 @@ func _flatten_xz(n: Node) -> void:
 	for c in n.get_children():
 		_flatten_xz(c)
 
-func _fit_plant(inst: Node3D, pos: Vector3, target_h: float, rng: RandomNumberGenerator) -> void:
+func _fit_plant(inst: Node3D, pos: Vector3, target_h: float, rng: RandomNumberGenerator, max_radius: float = -1.0) -> void:
 	_flatten_xz(inst)
 	add_child(inst)
 	var a := AABB()
@@ -439,6 +467,17 @@ func _fit_plant(inst: Node3D, pos: Vector3, target_h: float, rng: RandomNumberGe
 		inst.position = pos
 		return
 	var s := target_h / a.size.y
+	if max_radius > 0.0:
+		var o := inst.global_position
+		var x0 := a.position.x - o.x
+		var x1 := a.end.x - o.x
+		var z0 := a.position.z - o.z
+		var z1 := a.end.z - o.z
+		var reach := maxf(Vector2(x0, z0).length(), Vector2(x0, z1).length())
+		reach = maxf(reach, Vector2(x1, z0).length())
+		reach = maxf(reach, Vector2(x1, z1).length())
+		if reach > 0.01:
+			s = minf(s, max_radius / reach)
 	inst.scale = Vector3(s, s, s)
 	inst.rotation.y = rng.randf() * TAU
 	inst.position = Vector3(pos.x, pos.y, pos.z)
@@ -1283,7 +1322,7 @@ func _anim_npcs(delta: float) -> void:
 		var home: Vector3 = n["home"]
 		var tgt: Vector3 = n["tgt"]
 		n["sit"] = float(n.get("sit", 0.0)) - delta
-		var freeze := (hob_node != "" and str(n["id"]) == "hob") or (dog_node != "" and str(n["id"]) == "bramble") or (n.get("kind", "") == "hound" and float(n.get("sit", 0.0)) > 0.0)
+		var freeze: bool = (hob_node != "" and str(n["id"]) == "hob") or (dog_node != "" and str(n["id"]) == "bramble") or (n.get("kind", "") == "hound" and float(n.get("sit", 0.0)) > 0.0)
 		if freeze:
 			tgt = n["node"].global_position
 			n["tgt"] = tgt
@@ -1297,12 +1336,12 @@ func _anim_npcs(delta: float) -> void:
 			n["tgt"] = tgt
 		var pos: Vector3 = n["node"].global_position
 		var d := Vector3(tgt.x - pos.x, 0.0, tgt.z - pos.z)
-		var moving := (not freeze) and d.length() > 0.2
+		var moving: bool = (not freeze) and d.length() > 0.2
 		if moving:
 			var sp := 3.0 if n.get("kind", "") == "critter" else (0.7 if n.get("kind", "") == "hound" else 1.2)
 			n["node"].global_position = pos + d.normalized() * sp * delta
 		if n.get("kind", "") == "hound":
-			var sitting := freeze or float(n.get("sit", 0.0)) > 0.0
+			var sitting: bool = freeze or float(n.get("sit", 0.0)) > 0.0
 			if n.get("sitSpr"):
 				n["sitSpr"].visible = sitting
 			if n.get("walkSpr"):
