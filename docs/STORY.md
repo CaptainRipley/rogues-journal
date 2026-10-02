@@ -32,7 +32,7 @@ The player believing they are the only plan is useful. It is also the joke.
 1. Empty house. Rain. Loom still threaded.
 2. The road. Mud. A hanged WELCOME sign.
 3. Hob's toll.
-4. The inn "The Generous Cup."
+4. The smithy "The Closed Fist." Marta works the anvil. Char Heap only sells her coal.
 5. Outer wall. End of slice.
 
 ## Later endings (to write)

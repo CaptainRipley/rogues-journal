@@ -9,7 +9,7 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 CC0. The author says no credits are required. Credited here anyway.
 
 - `church.glb` + `Church.png` — St. Drip. Converted from the pack's `Church.fbx`. The texture file in the zip is `ChurchTexture.png`; the FBX looks for `Church.png`.
-- `tavern.glb` + `TavernTexture.jpg` — The Generous Cup. Converted from `Tavern.fbx`.
+- `tavern.glb` + `TavernTexture.jpg` — converted from `Tavern.fbx`. Not placed. The old inn lot is now The Closed Fist, a stone workshop.
 
 ## Cottages, hostel, smith, shops, stables
 PSX style going medieval — valsekamerplant

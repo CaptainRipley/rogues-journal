@@ -6,6 +6,7 @@ Use original work or licensed packs. No rips.
 
 - Opening woods: PS1 Haunted/dreamer Nature Pack — see `godot/assets/psx-nature/CREDITS.md`
 - Town humans (Hob, Marta, Bren, Cole, Pell, Ralf): Nocturnal Watch PSX characters (CC0, toboas) — see `godot/assets/psx-characters/CREDITS.md`
+- The Closed Fist yard (anvil, forge, bellows, tools): Medieval Smith Pack, Daniel Andersson, CC0 — see `godot/assets/psx-smith/CREDITS.md`
 - Nix stays the `nix.png` billboard
 
 Want dark castle / wet village, not sunny farm tiles.

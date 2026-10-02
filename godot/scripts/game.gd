@@ -346,14 +346,14 @@ func _place_town() -> void:
 	var left: Array = [
 		["MUD HOUSE", 7.2, 4.1, 6.2, "e", "cottage", false],
 		["NO BEDS", 7.2, 4.4, 6.4, "e", "hostel", false],
-		["IRON & ASH", 7.8, 5.0, 7.2, "e", "smith", true],
+		["CHAR HEAP", 7.8, 5.0, 7.2, "e", "shop", false],
 		["ST. DRIP", 8.2, 6.4, 7.6, "e", "chapel", true],
 		["LEAN-TO", 6.8, 4.0, 5.6, "e", "cottage", false],
 	]
 	var right: Array = [
 		["COOPER", 7.2, 4.0, 6.2, "w", "shop", false],
 		["HIDE WORKS", 7.2, 4.2, 6.4, "w", "shop", false],
-		["THE GENEROUS CUP", 8.4, 6.2, 8.4, "w", "inn", false],
+		["THE CLOSED FIST", 8.4, 6.2, 8.4, "w", "smith", true],
 		["THE KING'S NAGS", 8.0, 4.3, 7.4, "w", "stables", false],
 		["TALLOW", 6.6, 3.9, 5.4, "w", "shop", false],
 	]
@@ -456,12 +456,9 @@ func _dress_road() -> void:
 				float(frame["z"]) + side * float(frame["rz"]) * 3.05
 			))
 		d += 9.0
-	var smith := _lot_named("IRON & ASH")
-	var inn := _lot_named("THE GENEROUS CUP")
-	if not smith.is_empty():
-		_firepit(_porch(smith, 2.2, 2.4), true)
-	if not inn.is_empty():
-		_firepit(_porch(inn, -2.2, 2.4), false)
+	var fist := _lot_named("THE CLOSED FIST")
+	if not fist.is_empty():
+		_dress_workshop(fist)
 	var approach := _road_frame(_road_len - 8.0)
 	for side_v in [-1.0, 1.0]:
 		var side := float(side_v)
@@ -478,6 +475,128 @@ func _dress_road() -> void:
 				break
 		if placed:
 			_firepit(pit, false)
+
+func _yard(face: String, depth: float, along: float, out: float) -> Vector3:
+	var sign := -1.0 if face == "w" else 1.0
+	return Vector3(sign * (depth + out), 0.0, along)
+
+func _dress_workshop(lot: Dictionary) -> void:
+	var pivot := Node3D.new()
+	pivot.position = lot["pos"]
+	pivot.rotation.y = float(lot["yaw"])
+	add_child(pivot)
+	_lot_root = pivot
+	var face := str(lot["face"])
+	var depth := (lot["size"] as Vector3).x * 0.5
+	var forge := _place_prop("res://assets/psx-smith/forge.glb", _yard(face, depth, -2.2, 0.8), 0.0, 0.55, true, 0.0)
+	_clear_facade(forge, face, depth, 0.14)
+	if forge != null:
+		_torch(forge.position + Vector3(0.0, 0.4, 0.0), Color(1.0, 0.42, 0.12), 2.8)
+		_place_prop("res://assets/psx-smith/poker.glb", forge.position + _yard(face, 0.0, 0.32, 0.42), 0.35, 0.72, false, 0.4)
+	var bellows := _place_prop("res://assets/psx-smith/bellows.glb", _yard(face, depth, -0.8, 0.65), PI * 0.5, 0.5, false, 0.0)
+	_clear_facade(bellows, face, depth, 0.12)
+	var anvil := _place_prop("res://assets/psx-smith/anvil.glb", _yard(face, depth, 2.45, 0.95), 0.35, 0.82, true, 0.0)
+	_clear_facade(anvil, face, depth, 0.2)
+	if anvil != null:
+		var top := anvil.position + Vector3(0.0, 0.88, 0.0)
+		_place_prop("res://assets/psx-smith/hammer.glb", top + Vector3(0.0, 0.0, -0.04), 0.35, 0.46, false, 1.2)
+		var lean := -0.48 if face == "w" else 0.48
+		_place_prop("res://assets/psx-smith/hammer_small.glb", anvil.position + Vector3(lean, 0.05, 0.18), -0.4, 0.38, false, 0.55)
+	_place_prop("res://assets/psx-smith/bucket.glb", _yard(face, depth, 3.05, 0.4), 0.2, 0.4, false, 0.0)
+	var barrel := _place_prop("res://assets/psx-smith/barrel.glb", _yard(face, depth, 3.65, 1.0), 0.0, 0.82, true, 0.0)
+	_clear_facade(barrel, face, depth, 0.16)
+	if barrel != null:
+		_place_prop("res://assets/psx-smith/tongs.glb", barrel.position + Vector3(0.0, 0.86, 0.0), 0.8, 0.4, false, 1.15)
+	var stone := _place_prop("res://assets/psx-smith/grindstone.glb", _yard(face, depth, -3.5, 0.6), 1.15, 1.05, true, 0.0)
+	_clear_facade(stone, face, depth, 0.14)
+	_place_prop("res://assets/psx-smith/shovel.glb", _yard(face, depth, 4.02, 0.4), 0.2, 0.95, false, 0.12)
+	_sword_rack(_yard(face, depth, 1.4, 1.05))
+	_lot_root = null
+
+func _clear_facade(prop: Node3D, face: String, depth: float, gap: float) -> void:
+	if prop == null or _lot_root == null:
+		return
+	var box := _aabb_in(_lot_root, prop)
+	if box.size.y < 0.001:
+		return
+	if face == "w":
+		var inner := box.position.x + box.size.x
+		var limit := -depth - gap
+		if inner > limit:
+			prop.position.x -= inner - limit
+	elif face == "e":
+		var inner_e := box.position.x
+		var limit_e := depth + gap
+		if inner_e < limit_e:
+			prop.position.x += limit_e - inner_e
+
+func _sword_rack(at: Vector3) -> void:
+	var wood := Color(0.34, 0.2, 0.1)
+	_unlit_box(Vector3(0.08, 0.9, 0.08), at + Vector3(0.0, 0.45, -0.22), wood)
+	_unlit_box(Vector3(0.08, 0.9, 0.08), at + Vector3(0.0, 0.45, 0.22), wood)
+	_unlit_box(Vector3(0.06, 0.06, 0.56), at + Vector3(0.0, 0.72, 0.0), Color(0.42, 0.26, 0.12))
+	_place_prop("res://assets/models/Sword.obj", at + Vector3(0.0, 0.76, -0.08), 0.2, 0.95, false, 0.0)
+	_place_prop("res://assets/models/Sword_2.obj", at + Vector3(0.0, 0.76, 0.1), -0.15, 0.9, false, 0.0)
+
+func _place_prop(path: String, pos: Vector3, yaw: float, target_h: float, solid: bool, pitch: float) -> Node3D:
+	var res: Resource = load(path)
+	var inst: Node3D = null
+	if res is PackedScene:
+		inst = (res as PackedScene).instantiate() as Node3D
+	elif res is Mesh:
+		var mi := MeshInstance3D.new()
+		mi.mesh = res as Mesh
+		inst = mi
+	if inst == null:
+		push_error("Missing smith prop %s" % path)
+		return null
+	var pivot := Node3D.new()
+	pivot.position = pos
+	pivot.rotation = Vector3(pitch, yaw, 0.0)
+	_adopt(pivot)
+	pivot.add_child(inst)
+	_unshade(inst, false)
+	var box := _aabb_in(pivot, inst)
+	if box.size.y < 0.001:
+		return pivot
+	var fitted := target_h / box.size.y
+	inst.scale = Vector3(fitted, fitted, fitted)
+	box = _aabb_in(pivot, inst)
+	var mid := box.get_center()
+	inst.position -= Vector3(mid.x, box.position.y, mid.z)
+	if solid:
+		box = _aabb_in(pivot, inst)
+		var body := StaticBody3D.new()
+		var col := CollisionShape3D.new()
+		var sh := BoxShape3D.new()
+		sh.size = box.size
+		col.shape = sh
+		body.position = box.get_center()
+		body.add_child(col)
+		pivot.add_child(body)
+	return pivot
+
+func _aabb_in(space: Node3D, root: Node) -> AABB:
+	var found := false
+	var acc := AABB()
+	var inv := space.global_transform.affine_inverse()
+	var stack: Array = [root]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh:
+			var mi := n as MeshInstance3D
+			var local := mi.get_aabb()
+			var xf := inv * mi.global_transform
+			for i in 8:
+				var p: Vector3 = xf * local.get_endpoint(i)
+				if not found:
+					acc = AABB(p, Vector3.ZERO)
+					found = true
+				else:
+					acc = acc.expand(p)
+		for c in n.get_children():
+			stack.append(c)
+	return acc
 
 func _assert_stands(who: String, pos: Vector3) -> void:
 	if _inside_lot(pos.x, pos.z, -0.05):
@@ -791,7 +910,8 @@ func _unshade(n: Node, foliage: bool = true) -> void:
 						m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 						m.cull_mode = BaseMaterial3D.CULL_BACK
 						m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
-					m.albedo_color = Color(1, 1, 1)
+					if m.albedo_texture != null:
+						m.albedo_color = Color(1, 1, 1)
 					mi.set_surface_override_material(i, m)
 	for c in n.get_children():
 		_unshade(c, foliage)
@@ -990,10 +1110,11 @@ func _build_npcs() -> void:
 		"Road tax. Feast night. Double, unless you're expected.",
 		"If anyone asks, you were a priest. I'm a businessman.",
 	])
-	var marta_at := _porch(_lot_named("THE GENEROUS CUP"), 0.8, 1.8)
-	_add_npc("marta", "Marta", marta_at, float(_lot_named("THE GENEROUS CUP")["yaw"]), false, [
-		"They named this cup after him. The ale tastes like a policy.",
-		"East gallery, first course. That's where he parks what he stole.",
+	var fist_lot := _lot_named("THE CLOSED FIST")
+	var marta_at := _porch(fist_lot, 0.8, 1.8)
+	_add_npc("marta", "Marta", marta_at, float(fist_lot["yaw"]), false, [
+		"The cup was his joke. This fist is mine. You want iron, you pay before it cools.",
+		"East gallery, first course. I shod the horse that hauled her there. The steel was better than the man.",
 	])
 	var gate := _road_frame(_road_len - 4.2)
 	var bren_at := Vector3(
@@ -2085,7 +2206,7 @@ func _hob_tree() -> Dictionary:
 			],
 		},
 		"who": {
-			"line": "Marta waters the cups. Pell keeps a key she shouldn't. Ralf is already Cousin-of-a-Baron, drunk. Me? I hate the paperwork. The king is a very tall form.",
+			"line": "Marta keeps the fist. She'll shoe a horse or a grievance, and she bills both. Pell keeps a key she shouldn't. Ralf is already Cousin-of-a-Baron, drunk. Me? I hate the paperwork. The king is a very tall form.",
 			"choices": [
 				{"id": "hire", "label": "Hate the form with me."},
 				{"id": "leave", "label": "I'll start with Marta."},
@@ -2214,7 +2335,7 @@ func _dog_tree() -> Dictionary:
 			"choices": [{"id": "leave", "label": "Good boy. Worse king."}],
 		},
 		"ask": {
-			"line": "He smells the ditch on you. Then the inn. Then pity. No wife in that nose. Only gravy, and a rat he has already forgiven.",
+			"line": "He smells the ditch on you. Then the forge. Then pity. No wife in that nose. Only coal, and a rat he has already forgiven.",
 			"choices": [
 				{"id": "pet", "label": "Scratch him anyway."},
 				{"id": "leave", "label": "Keep sniffing, soldier."},
