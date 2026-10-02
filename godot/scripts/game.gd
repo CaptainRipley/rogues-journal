@@ -78,6 +78,7 @@ var fires: Array = []
 var _night_mats: Array = []
 var _pool_tex: Texture2D
 var _flame_tex: Texture2D
+var _puddle_tex: Texture2D
 var _sign_tex: Dictionary = {}
 var _lot_root: Node3D = null
 var _lots: Array = []
@@ -409,6 +410,7 @@ func _place_town() -> void:
 			d += 0.2
 		if not found:
 			push_error("No room on the S-curve for %s" % name)
+	_dress_fist_yard()
 	_dress_road()
 	if _lots.size() != 10:
 		push_error("S-curve town placed %d lots" % _lots.size())
@@ -2050,6 +2052,325 @@ func _module_house(pos: Vector3, size: Vector3, face: String, shell: String, roo
 		stack.scale = Vector3(0.42, 0.42, 0.42)
 		_adopt(stack)
 
+func _road_along(x: float, z: float) -> float:
+	var p := Vector2(x, z)
+	var best := 10000.0
+	var along := 0.0
+	for i in range(_road_pts.size() - 1):
+		var a := _road_pts[i]
+		var b := _road_pts[i + 1]
+		var ab := b - a
+		var denom := ab.length_squared()
+		var t := 0.0 if denom < 0.0001 else clampf((p - a).dot(ab) / denom, 0.0, 1.0)
+		var dist := p.distance_to(a + ab * t)
+		if dist < best:
+			best = dist
+			along = lerpf(_road_dst[i], _road_dst[i + 1], t)
+	return along
+
+func _puddle_texture() -> Texture2D:
+	if _puddle_tex != null:
+		return _puddle_tex
+	var n := 16
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var mid := (float(n) - 1.0) * 0.5
+	for y in n:
+		for x in n:
+			var dx := (float(x) - mid) / mid
+			var dy := (float(y) - mid) / mid
+			var e := dx * dx + dy * dy
+			var a := 0.0
+			if e < 0.55:
+				a = 1.0
+			elif e < 0.82:
+				a = 0.72
+			elif e < 1.0:
+				a = 0.28
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	_puddle_tex = ImageTexture.create_from_image(img)
+	return _puddle_tex
+
+func _workshop_part(model: Node, part_name: String) -> MeshInstance3D:
+	var stack: Array = [model]
+	while stack.size() > 0:
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and str(n.name) == part_name:
+			return n as MeshInstance3D
+		for c in n.get_children():
+			stack.append(c)
+	push_error("Workshop is missing %s" % part_name)
+	return null
+
+func _fist_blocked(x0: float, z0: float, x1: float, z1: float) -> bool:
+	# Bay mouth, the left aisle around the bellows, Marta and the anvil, the door steps, the shop shell.
+	var boxes: Array = [
+		[-2.45, 3.02, 0.62, 4.85],
+		[-3.75, 2.35, -2.05, 4.75],
+		[-1.1, 1.2, 0.4, 2.2],
+		[1.12, 3.18, 2.64, 4.92],
+		[0.34, -2.35, 3.43, 3.52],
+	]
+	for b in boxes:
+		var bx0: float = float(b[0])
+		var bz0: float = float(b[1])
+		var bx1: float = float(b[2])
+		var bz1: float = float(b[3])
+		if x0 < bx1 and x1 > bx0 and z0 < bz1 and z1 > bz0:
+			return true
+	return false
+
+func _fist_footprint(at: Vector3, size: Vector3, yaw: float) -> Array:
+	var hx := size.x * 0.5
+	var hz := size.z * 0.5
+	var c := cos(yaw)
+	var s := sin(yaw)
+	var min_x := 1000.0
+	var max_x := -1000.0
+	var min_z := 1000.0
+	var max_z := -1000.0
+	var corners: Array[Vector2] = [Vector2(hx, hz), Vector2(hx, -hz), Vector2(-hx, hz), Vector2(-hx, -hz)]
+	for corner in corners:
+		var x := at.x + corner.x * c - corner.y * s
+		var z := at.z + corner.x * s + corner.y * c
+		min_x = minf(min_x, x)
+		max_x = maxf(max_x, x)
+		min_z = minf(min_z, z)
+		max_z = maxf(max_z, z)
+	return [min_x, min_z, max_x, max_z]
+
+func _fist_prop(model: Node3D, part_name: String, at: Vector3, yaw: float, tilt: float, solid: bool) -> void:
+	var src := _workshop_part(model, part_name)
+	if src == null:
+		return
+	var aabb := src.get_aabb()
+	var footprint: Array = _fist_footprint(at, aabb.size, yaw)
+	if _fist_blocked(float(footprint[0]), float(footprint[1]), float(footprint[2]), float(footprint[3])):
+		push_error("Fist clutter %s blocks the bay" % part_name)
+	var pivot := Node3D.new()
+	pivot.position = at + Vector3(0.0, sin(absf(tilt)) * aabb.size.y * 0.22, 0.0)
+	pivot.rotation = Vector3(tilt, yaw, 0.0)
+	var copy := src.duplicate() as MeshInstance3D
+	var center := aabb.get_center()
+	copy.position = Vector3(-center.x, -aabb.position.y, -center.z)
+	pivot.add_child(copy)
+	model.add_child(pivot)
+	if solid and absf(tilt) < 0.01:
+		_obstacle(pivot, Vector3(-aabb.size.x * 0.5, 0.0, -aabb.size.z * 0.5), Vector3(aabb.size.x * 0.5, aabb.size.y, aabb.size.z * 0.5))
+
+func _fist_pot(model: Node3D, at: Vector3, radius: float, height: float, clay: Color) -> void:
+	var footprint: Array = _fist_footprint(at, Vector3(radius * 2.0, height, radius * 2.0), 0.0)
+	if _fist_blocked(float(footprint[0]), float(footprint[1]), float(footprint[2]), float(footprint[3])):
+		push_error("Fist pot blocks the bay")
+	var pot := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius * 1.12
+	mesh.bottom_radius = radius * 0.78
+	mesh.height = height
+	mesh.radial_segments = 6
+	pot.mesh = mesh
+	pot.position = at + Vector3(0.0, height * 0.5, 0.0)
+	pot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = clay
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	pot.material_override = mat
+	model.add_child(pot)
+	_obstacle(model, at + Vector3(-radius, 0.0, -radius), at + Vector3(radius, height, radius))
+
+func _fist_weed(pos: Vector3, yaw: float, scale: float) -> void:
+	if grass_mats.is_empty():
+		return
+	var idx := int(absf(pos.x * 3.0 + pos.z * 5.0)) % grass_mats.size()
+	var h := 0.55 * scale
+	var w := 0.9 * scale
+	_psx_card(grass_mats[idx], Vector3(pos.x, h * 0.48, pos.z), w, h, yaw)
+
+func _fist_fence_blocked(dist: float, side: float) -> bool:
+	var frame := _road_frame(dist)
+	for lot in _lots:
+		var pos: Vector3 = lot["pos"]
+		var lat := (pos.x - float(frame["x"])) * float(frame["rx"]) + (pos.z - float(frame["z"])) * float(frame["rz"])
+		if lat * side < 3.0:
+			continue
+		var lot_d := _road_along(pos.x, pos.z)
+		var size: Vector3 = lot["size"]
+		if absf(dist - lot_d) < size.z * 0.5 + 0.45:
+			return true
+	return false
+
+func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNumberGenerator) -> void:
+	if pts.size() < 2:
+		return
+	var post_col := Color(0.29, 0.22, 0.15)
+	var rail_col := Color(0.40, 0.30, 0.19)
+	var saved := _lot_root
+	for i in pts.size():
+		var pos := pts[i]
+		var h := heights[i]
+		_lot_root = null
+		_unlit_box(Vector3(0.14, h, 0.14), pos + Vector3(0.0, h * 0.5, 0.0), post_col)
+		_obstacle(self, pos + Vector3(-0.07, 0.0, -0.07), pos + Vector3(0.07, h, 0.07))
+		if i == 0:
+			continue
+		var prev := pts[i - 1]
+		var span := prev.distance_to(pos)
+		var mid := (prev + pos) * 0.5
+		var yaw := atan2(pos.x - prev.x, pos.z - prev.z)
+		var pivot := Node3D.new()
+		pivot.position = mid
+		pivot.rotation.y = yaw
+		add_child(pivot)
+		_lot_root = pivot
+		var low := 0.38 if i % 2 == 0 else 0.46
+		var high := 0.78 if i % 2 == 0 else 0.86
+		_unlit_box(Vector3(0.08, 0.07, span + 0.08), Vector3(0.0, low, 0.0), rail_col)
+		_unlit_box(Vector3(0.07, 0.06, span + 0.06), Vector3(0.0, high, 0.0), rail_col)
+		_obstacle(pivot, Vector3(-0.04, low - 0.04, -span * 0.5), Vector3(0.04, low + 0.04, span * 0.5))
+		_obstacle(pivot, Vector3(-0.04, high - 0.04, -span * 0.5), Vector3(0.04, high + 0.04, span * 0.5))
+	_lot_root = saved
+	for end_i in [0, pts.size() - 1]:
+		var end_pos := pts[end_i]
+		var end_d := _road_along(end_pos.x, end_pos.z)
+		var end_f := _road_frame(end_d)
+		var end_lat := (end_pos.x - float(end_f["x"])) * float(end_f["rx"]) + (end_pos.z - float(end_f["z"])) * float(end_f["rz"])
+		var end_side := 1.0 if end_lat >= 0.0 else -1.0
+		var bush_at := Vector3(
+			end_pos.x + end_side * float(end_f["rx"]) * 0.85,
+			0.0,
+			end_pos.z + end_side * float(end_f["rz"]) * 0.85
+		)
+		if not _inside_lot(bush_at.x, bush_at.z, 0.55):
+			_psx_tree("bush", bush_at, rng)
+
+func _dress_fist_yard() -> void:
+	var lot := _lot_named("THE CLOSED FIST")
+	if lot.is_empty() or not (lot.get("model") is Node3D):
+		push_error("Closed Fist yard has no workshop")
+		return
+	var model := lot["model"] as Node3D
+	# Street corner by the shop door, clear of the bay mouth and the steps.
+	_fist_prop(model, "Barrel1", Vector3(2.98, 0.0, 3.92), 0.35, 0.0, true)
+	_fist_prop(model, "Barrel2", Vector3(3.44, 0.0, 4.26), 1.9, 0.0, true)
+	_fist_prop(model, "ShortLog", Vector3(3.72, 0.0, 4.68), 0.6, 0.15, false)
+	_fist_prop(model, "WoodCutters Axe", Vector3(0.94, 0.0, 3.90), 0.4, 0.9, false)
+	_fist_prop(model, "PileofChoppedWood", Vector3(3.86, 0.0, 2.55), 0.2, 0.0, true)
+	_fist_prop(model, "PileOfLogs", Vector3(3.92, 0.0, 0.28), PI * 0.5, 0.0, true)
+	_fist_prop(model, "Barrel1", Vector3(3.86, 0.0, 1.62), 2.4, 0.0, true)
+	_fist_pot(model, Vector3(2.86, 0.0, 4.52), 0.16, 0.36, Color(0.55, 0.34, 0.22))
+	_fist_pot(model, Vector3(3.50, 0.0, 3.74), 0.13, 0.26, Color(0.40, 0.32, 0.26))
+	_fist_pot(model, Vector3(3.22, 0.0, 4.58), 0.11, 0.2, Color(0.48, 0.30, 0.2))
+	var lip: Vector3 = model.global_transform * Vector3(0.0, 0.0, 4.2)
+	var along := _road_along(lip.x, lip.z)
+	var frame := _road_frame(along)
+	var lateral := (lip.x - float(frame["x"])) * float(frame["rx"]) + (lip.z - float(frame["z"])) * float(frame["rz"])
+	if absf(lateral) < 3.0 or absf(lateral) > 7.5:
+		push_error("Fist lip is %.2f m off the road" % lateral)
+	var smith_side := 1.0 if lateral >= 0.0 else -1.0
+	var fence_side := -smith_side
+	var mud := _tile_mat("res://assets/mud.png", 2.4, Color(0.56, 0.43, 0.30))
+	var wet := _tile_mat("res://assets/mud.png", 1.6, Color(0.38, 0.29, 0.20))
+	_watch_night(mud)
+	_watch_night(wet)
+	var puddle := StandardMaterial3D.new()
+	puddle.albedo_texture = _puddle_texture()
+	puddle.albedo_color = Color(0.26, 0.28, 0.30)
+	puddle.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	puddle.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	puddle.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	puddle.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	puddle.alpha_scissor_threshold = 0.35
+	puddle.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_watch_night(puddle)
+	var d := along - 7.2
+	var seg := 0
+	while d < along + 7.2:
+		var f := _road_frame(d)
+		var yaw := atan2(float(f["tx"]), float(f["tz"]))
+		var wobble := sin(d * 1.37) * 0.45
+		var lift := 0.028 + float(seg % 3) * 0.001
+		_ground_patch(Vector3(
+			float(f["x"]) + float(f["rx"]) * wobble,
+			lift,
+			float(f["z"]) + float(f["rz"]) * wobble
+		), Vector2(6.8, 2.35), mud, yaw + sin(d * 0.6) * 0.05)
+		for rut_side in [-0.95, 0.7]:
+			var rut_off := float(rut_side) + sin(d * 0.9 + float(rut_side)) * 0.18
+			_ground_patch(Vector3(
+				float(f["x"]) + float(f["rx"]) * rut_off,
+				0.033,
+				float(f["z"]) + float(f["rz"]) * rut_off
+			), Vector2(0.72, 2.05), wet, yaw)
+		d += 1.65
+		seg += 1
+	var puddles: Array = [
+		[-4.4, -0.55, 1.9, 1.15],
+		[-1.3, 0.85, 1.35, 0.85],
+		[1.6, -1.05, 1.7, 1.05],
+		[4.5, 0.35, 1.15, 0.75],
+	]
+	for spot in puddles:
+		var pd := along + float(spot[0])
+		var pf := _road_frame(pd)
+		var pyaw := atan2(float(pf["tx"]), float(pf["tz"]))
+		var plat := float(spot[1])
+		_ground_patch(Vector3(
+			float(pf["x"]) + float(pf["rx"]) * plat,
+			0.038,
+			float(pf["z"]) + float(pf["rz"]) * plat
+		), Vector2(float(spot[2]), float(spot[3])), puddle, pyaw)
+	for apron in [-2.4, -0.6, 1.2, 2.8]:
+		var af := _road_frame(along + float(apron))
+		var ayaw := atan2(float(af["tx"]), float(af["tz"]))
+		_ground_patch(Vector3(
+			float(af["x"]) + smith_side * float(af["rx"]) * 3.85,
+			0.029,
+			float(af["z"]) + smith_side * float(af["rz"]) * 3.85
+		), Vector2(2.6, 2.1), mud, ayaw)
+	var run_pos: Array[Vector3] = []
+	var run_h: Array[float] = []
+	var post_n := 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4417
+	var fd := along - 5.4
+	var post_i := 0
+	while fd < along + 5.4:
+		if _fist_fence_blocked(fd, fence_side):
+			_raise_fence_run(run_pos, run_h, rng)
+			run_pos = []
+			run_h = []
+		else:
+			var ff := _road_frame(fd)
+			var sway := sin(fd * 2.1) * 0.12
+			var px := float(ff["x"]) + fence_side * float(ff["rx"]) * (3.55 + sway)
+			var pz := float(ff["z"]) + fence_side * float(ff["rz"]) * (3.55 + sway)
+			run_pos.append(Vector3(px, 0.0, pz))
+			run_h.append(0.92 + float(post_i % 3) * 0.1)
+			post_n += 1
+			_fist_weed(Vector3(
+				px + fence_side * float(ff["rx"]) * 0.55,
+				0.0,
+				pz + fence_side * float(ff["rz"]) * 0.55
+			), float(ff["yaw"]) + rng.randf() * 0.6, 0.85 + rng.randf() * 0.7)
+			_fist_weed(Vector3(
+				px - fence_side * float(ff["rx"]) * 0.7,
+				0.0,
+				pz - fence_side * float(ff["rz"]) * 0.7
+			), float(ff["yaw"]) + 0.8, 0.65 + rng.randf() * 0.4)
+		fd += 1.5
+		post_i += 1
+	_raise_fence_run(run_pos, run_h, rng)
+	if post_n < 3:
+		push_error("Fist fence placed %d posts" % post_n)
+	for end_off in [-4.7, -3.9, 3.9, 4.8]:
+		var ef := _road_frame(along + float(end_off))
+		_fist_weed(Vector3(
+			float(ef["x"]) + smith_side * float(ef["rx"]) * 4.15,
+			0.0,
+			float(ef["z"]) + smith_side * float(ef["rz"]) * 4.15
+		), float(ef["yaw"]) + float(end_off) * 0.1, 1.05)
+
 func _open_workshop(face: String, lot_name: String) -> Dictionary:
 	# Daniel Andersson's CC0 blacksmith: closed shop on one side, open forge bay
 	# under the roof on the other. glTF +Z is that open side. Yaw it onto the street.
@@ -2082,6 +2403,7 @@ func _open_workshop(face: String, lot_name: String) -> Dictionary:
 		"smith_pos": marta_world,
 		"smith_yaw": atan2(toward.x, toward.z),
 		"solid": solid,
+		"model": model,
 	}
 
 func _lot_span(model: Node3D, a: Vector3, b: Vector3) -> Array:
