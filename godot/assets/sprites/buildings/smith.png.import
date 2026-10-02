@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://3mtmb7wn1556"
-path="res://.godot/imported/stone.png-3a1875e621a1b764516a9ea0026422f2.ctex"
+uid="uid://plcerh1mls1c"
+path="res://.godot/imported/smith.png-ec13623c87225a94339ebf90c95c9342.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/stone.png"
-dest_files=["res://.godot/imported/stone.png-3a1875e621a1b764516a9ea0026422f2.ctex"]
+source_file="res://assets/sprites/buildings/smith.png"
+dest_files=["res://.godot/imported/smith.png-ec13623c87225a94339ebf90c95c9342.ctex"]
 
 [params]
 

@@ -6,7 +6,7 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 
 CC0. The author says no credits are required. Credited here anyway, same place as the other packs.
 
-Shipped meshes (converted from the pack's FBX to GLB, feet on the ground, face toward +Z so the existing look-at turns them toward the player):
+Shipped meshes (converted from the pack's FBX to GLB, feet on the ground, face toward +Z so the existing look-at turns them toward the player). The pack ships a bind-pose T with no skeleton and no clips, so the rest pose in these GLBs has the arms lowered to a stand. Dialogue, ids, and positions are unchanged.
 
 | NPC | Mesh | Texture |
 |---|---|---|

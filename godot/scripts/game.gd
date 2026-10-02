@@ -150,7 +150,7 @@ func _castle_piece(src: Dictionary, name: String, pos: Vector3, yaw: float, s: f
 	n.position = pos
 	n.rotation = Vector3(0, yaw, 0)
 	n.scale = Vector3(s, s, s)
-	_unshade(n)
+	_unshade(n, false)
 	add_child(n)
 
 func _build_castle_gate() -> void:
@@ -444,7 +444,7 @@ func _fit_plant(inst: Node3D, pos: Vector3, target_h: float, rng: RandomNumberGe
 	inst.position = Vector3(pos.x, pos.y, pos.z)
 	_unshade(inst)
 
-func _unshade(n: Node) -> void:
+func _unshade(n: Node, foliage: bool = true) -> void:
 	if n is MeshInstance3D:
 		var mi := n as MeshInstance3D
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -455,13 +455,24 @@ func _unshade(n: Node) -> void:
 					var m := (sm as BaseMaterial3D).duplicate() as BaseMaterial3D
 					m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 					m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-					m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-					m.alpha_scissor_threshold = 0.4
-					m.cull_mode = BaseMaterial3D.CULL_DISABLED
+					m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+					m.roughness = 1.0
+					m.metallic = 0.0
+					m.metallic_specular = 0.0
+					# Foliage cards need a cutout. Castle stone is opaque; scissor plus
+					# two-sided drawing let the gate sort through the player.
+					if foliage:
+						m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+						m.alpha_scissor_threshold = 0.4
+						m.cull_mode = BaseMaterial3D.CULL_DISABLED
+					else:
+						m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+						m.cull_mode = BaseMaterial3D.CULL_BACK
+						m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
 					m.albedo_color = Color(1, 1, 1)
 					mi.set_surface_override_material(i, m)
 	for c in n.get_children():
-		_unshade(c)
+		_unshade(c, foliage)
 
 func _prop(path: String, pos: Vector3, px: float) -> void:
 	var s := Sprite3D.new()
@@ -823,7 +834,11 @@ func _box(size: Vector3, pos: Vector3, color: Color, tex: Texture2D, solid: bool
 	mi.mesh = mesh
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
-	mat.roughness = 0.95
+	mat.roughness = 1.0
+	mat.metallic = 0.0
+	mat.metallic_specular = 0.0
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	if tex:
 		mat.albedo_texture = tex
@@ -929,14 +944,42 @@ func _house(pos: Vector3, size: Vector3, name: String, stone: bool, face: String
 		fz = pos.z - size.z * 0.5
 	if art != "":
 		var s := Sprite3D.new()
-		s.texture = load("res://assets/sprites/buildings/%s.png" % art)
+		var tex: Texture2D = load("res://assets/sprites/buildings/%s.png" % art) as Texture2D
+		s.texture = tex
 		s.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 		s.shaded = false
-		s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+		# Opaque cards were alpha-blended, so the whole wall sorted wrong and
+		# drew behind the camera. Discard writes depth. Near-white margins
+		# (cottage, shop) are already keyed out of the PNG.
+		s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+		s.alpha_scissor_threshold = 0.5
+		s.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
 		s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var tw := 128.0
+		var th := 128.0
+		if tex:
+			tw = float(tex.get_width())
+			th = float(tex.get_height())
 		var front_w := size.z if face == "e" or face == "w" else size.x
-		s.pixel_size = front_w / 128.0
-		s.position = Vector3(fx, size.y * 0.5, fz)
+		var fit_w := front_w * 0.96
+		var fit_h := size.y * 0.98
+		s.pixel_size = minf(fit_w / tw, fit_h / th)
+		var spr_h := th * s.pixel_size
+		var outward := 0.06
+		var sx := fx
+		var sz := fz
+		if face == "e":
+			sx += outward
+		elif face == "w":
+			sx -= outward
+		elif face == "s":
+			sz += outward
+		else:
+			sz -= outward
+		# Bottom on the ground, centered on the face. The old 128px assumption
+		# pushed these cards through the floor and into the street.
+		s.position = Vector3(sx, spr_h * 0.5, sz)
 		if face == "e":
 			s.rotation.y = PI * 0.5
 		elif face == "w":
@@ -971,8 +1014,10 @@ func _build_backdrop() -> void:
 	add_child(bg_mesh)
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 	mat.cull_mode = BaseMaterial3D.CULL_FRONT
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	mat.albedo_texture = load("res://assets/sprites/bg/1.png")
 	mat.disable_fog = true
 	bg_mesh.material_override = mat
