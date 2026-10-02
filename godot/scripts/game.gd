@@ -456,9 +456,6 @@ func _dress_road() -> void:
 				float(frame["z"]) + side * float(frame["rz"]) * 3.05
 			))
 		d += 9.0
-	var fist := _lot_named("THE CLOSED FIST")
-	if not fist.is_empty():
-		_dress_workshop(fist)
 	var approach := _road_frame(_road_len - 8.0)
 	for side_v in [-1.0, 1.0]:
 		var side := float(side_v)
@@ -476,131 +473,32 @@ func _dress_road() -> void:
 		if placed:
 			_firepit(pit, false)
 
-func _yard(face: String, depth: float, along: float, out: float) -> Vector3:
-	var sign := -1.0 if face == "w" else 1.0
-	return Vector3(sign * (depth + out), 0.0, along)
-
-func _dress_workshop(lot: Dictionary) -> void:
-	var pivot := Node3D.new()
-	pivot.position = lot["pos"]
-	pivot.rotation.y = float(lot["yaw"])
-	add_child(pivot)
-	_lot_root = pivot
-	var face := str(lot["face"])
-	var depth := (lot["size"] as Vector3).x * 0.5
-	var forge := _place_prop("res://assets/psx-smith/forge.glb", _yard(face, depth, -2.2, 0.8), 0.0, 0.55, true, 0.0)
-	_clear_facade(forge, face, depth, 0.14)
-	if forge != null:
-		_torch(forge.position + Vector3(0.0, 0.4, 0.0), Color(1.0, 0.42, 0.12), 2.8)
-		_place_prop("res://assets/psx-smith/poker.glb", forge.position + _yard(face, 0.0, 0.32, 0.42), 0.35, 0.72, false, 0.4)
-	var bellows := _place_prop("res://assets/psx-smith/bellows.glb", _yard(face, depth, -0.8, 0.65), PI * 0.5, 0.5, false, 0.0)
-	_clear_facade(bellows, face, depth, 0.12)
-	var anvil := _place_prop("res://assets/psx-smith/anvil.glb", _yard(face, depth, 2.45, 0.95), 0.35, 0.82, true, 0.0)
-	_clear_facade(anvil, face, depth, 0.2)
-	if anvil != null:
-		var top := anvil.position + Vector3(0.0, 0.88, 0.0)
-		_place_prop("res://assets/psx-smith/hammer.glb", top + Vector3(0.0, 0.0, -0.04), 0.35, 0.46, false, 1.2)
-		var lean := -0.48 if face == "w" else 0.48
-		_place_prop("res://assets/psx-smith/hammer_small.glb", anvil.position + Vector3(lean, 0.05, 0.18), -0.4, 0.38, false, 0.55)
-	_place_prop("res://assets/psx-smith/bucket.glb", _yard(face, depth, 3.05, 0.4), 0.2, 0.4, false, 0.0)
-	var barrel := _place_prop("res://assets/psx-smith/barrel.glb", _yard(face, depth, 3.65, 1.0), 0.0, 0.82, true, 0.0)
-	_clear_facade(barrel, face, depth, 0.16)
-	if barrel != null:
-		_place_prop("res://assets/psx-smith/tongs.glb", barrel.position + Vector3(0.0, 0.86, 0.0), 0.8, 0.4, false, 1.15)
-	var stone := _place_prop("res://assets/psx-smith/grindstone.glb", _yard(face, depth, -3.5, 0.6), 1.15, 1.05, true, 0.0)
-	_clear_facade(stone, face, depth, 0.14)
-	_place_prop("res://assets/psx-smith/shovel.glb", _yard(face, depth, 4.02, 0.4), 0.2, 0.95, false, 0.12)
-	_sword_rack(_yard(face, depth, 1.4, 1.05))
-	_lot_root = null
-
-func _clear_facade(prop: Node3D, face: String, depth: float, gap: float) -> void:
-	if prop == null or _lot_root == null:
-		return
-	var box := _aabb_in(_lot_root, prop)
-	if box.size.y < 0.001:
-		return
-	if face == "w":
-		var inner := box.position.x + box.size.x
-		var limit := -depth - gap
-		if inner > limit:
-			prop.position.x -= inner - limit
-	elif face == "e":
-		var inner_e := box.position.x
-		var limit_e := depth + gap
-		if inner_e < limit_e:
-			prop.position.x += limit_e - inner_e
-
-func _sword_rack(at: Vector3) -> void:
-	var wood := Color(0.34, 0.2, 0.1)
-	_unlit_box(Vector3(0.08, 0.9, 0.08), at + Vector3(0.0, 0.45, -0.22), wood)
-	_unlit_box(Vector3(0.08, 0.9, 0.08), at + Vector3(0.0, 0.45, 0.22), wood)
-	_unlit_box(Vector3(0.06, 0.06, 0.56), at + Vector3(0.0, 0.72, 0.0), Color(0.42, 0.26, 0.12))
-	_place_prop("res://assets/models/Sword.obj", at + Vector3(0.0, 0.76, -0.08), 0.2, 0.95, false, 0.0)
-	_place_prop("res://assets/models/Sword_2.obj", at + Vector3(0.0, 0.76, 0.1), -0.15, 0.9, false, 0.0)
-
-func _place_prop(path: String, pos: Vector3, yaw: float, target_h: float, solid: bool, pitch: float) -> Node3D:
-	var res: Resource = load(path)
-	var inst: Node3D = null
-	if res is PackedScene:
-		inst = (res as PackedScene).instantiate() as Node3D
-	elif res is Mesh:
-		var mi := MeshInstance3D.new()
-		mi.mesh = res as Mesh
-		inst = mi
-	if inst == null:
-		push_error("Missing smith prop %s" % path)
-		return null
-	var pivot := Node3D.new()
-	pivot.position = pos
-	pivot.rotation = Vector3(pitch, yaw, 0.0)
-	_adopt(pivot)
-	pivot.add_child(inst)
-	_unshade(inst, false)
-	var box := _aabb_in(pivot, inst)
-	if box.size.y < 0.001:
-		return pivot
-	var fitted := target_h / box.size.y
-	inst.scale = Vector3(fitted, fitted, fitted)
-	box = _aabb_in(pivot, inst)
-	var mid := box.get_center()
-	inst.position -= Vector3(mid.x, box.position.y, mid.z)
-	if solid:
-		box = _aabb_in(pivot, inst)
-		var body := StaticBody3D.new()
-		var col := CollisionShape3D.new()
-		var sh := BoxShape3D.new()
-		sh.size = box.size
-		col.shape = sh
-		body.position = box.get_center()
-		body.add_child(col)
-		pivot.add_child(body)
-	return pivot
-
-func _aabb_in(space: Node3D, root: Node) -> AABB:
-	var found := false
-	var acc := AABB()
-	var inv := space.global_transform.affine_inverse()
-	var stack: Array = [root]
-	while stack.size() > 0:
-		var n: Node = stack.pop_back()
-		if n is MeshInstance3D and (n as MeshInstance3D).mesh:
-			var mi := n as MeshInstance3D
-			var local := mi.get_aabb()
-			var xf := inv * mi.global_transform
-			for i in 8:
-				var p: Vector3 = xf * local.get_endpoint(i)
-				if not found:
-					acc = AABB(p, Vector3.ZERO)
-					found = true
-				else:
-					acc = acc.expand(p)
-		for c in n.get_children():
-			stack.append(c)
-	return acc
 
 func _assert_stands(who: String, pos: Vector3) -> void:
-	if _inside_lot(pos.x, pos.z, -0.05):
+	if _inside_shell(pos.x, pos.z):
 		push_error("%s is standing inside a building" % who)
+
+func _inside_shell(x: float, z: float) -> bool:
+	for lot in _lots:
+		if str(lot.get("kind", "")) == "smith":
+			if _in_lot_span(x, z, lot, lot["solid"]):
+				return true
+		elif _point_in_lot(x, z, lot, -0.05):
+			return true
+	if not _booth.is_empty() and _point_in_lot(x, z, _booth, -0.05):
+		return true
+	return false
+
+func _in_lot_span(x: float, z: float, lot: Dictionary, span: Array) -> bool:
+	var pos: Vector3 = lot["pos"]
+	var yaw: float = float(lot["yaw"])
+	var dx := x - pos.x
+	var dz := z - pos.z
+	var c := cos(yaw)
+	var s := sin(yaw)
+	var lx := c * dx - s * dz
+	var lz := s * dx + c * dz
+	return lx > float(span[0]) and lx < float(span[1]) and lz > float(span[2]) and lz < float(span[3])
 
 func _inside_lot(x: float, z: float, pad: float) -> bool:
 	for lot in _lots:
@@ -1111,8 +1009,8 @@ func _build_npcs() -> void:
 		"If anyone asks, you were a priest. I'm a businessman.",
 	])
 	var fist_lot := _lot_named("THE CLOSED FIST")
-	var marta_at := _porch(fist_lot, 0.8, 1.8)
-	_add_npc("marta", "Marta", marta_at, float(fist_lot["yaw"]), false, [
+	var marta_at: Vector3 = fist_lot["smith_pos"]
+	_add_npc("marta", "Marta", marta_at, float(fist_lot["smith_yaw"]), false, [
 		"The cup was his joke. This fist is mine. You want iron, you pay before it cools.",
 		"East gallery, first course. I shod the horse that hauled her there. The steel was better than the man.",
 	])
@@ -1224,6 +1122,11 @@ func _add_npc(id: String, npc_name: String, pos: Vector3, rot: float, guard: boo
 		"lines": lines, "purse": 4, "picked": false, "i": 0,
 		"home": pos, "tgt": pos, "wander": randf() * 2.0, "guard": guard, "ally": false, "kind": "person"
 	})
+	if id == "marta":
+		var hand := _arm_hammer(g)
+		npcs[npcs.size() - 1]["station"] = true
+		npcs[npcs.size() - 1]["work_yaw"] = rot
+		npcs[npcs.size() - 1]["hammer"] = hand
 
 func _npc_mesh(id: String) -> String:
 	match id:
@@ -1263,6 +1166,23 @@ func _rig_person(id: String) -> Node3D:
 	bob.add_child(body)
 	g.set_meta("body", bob)
 	return g
+
+func _arm_hammer(rig: Node3D) -> Node3D:
+	var packed: PackedScene = load("res://assets/psx-smith/strike_hammer.glb") as PackedScene
+	var hand := Node3D.new()
+	hand.name = "Hammer"
+	# Rig +Z is her face, aimed at the anvil. The right hand sits on -X.
+	hand.position = Vector3(-0.2, 1.02, 0.08)
+	var bob: Node3D = rig.get_meta("body")
+	bob.add_child(hand)
+	if packed == null:
+		push_error("Missing strike hammer")
+		return hand
+	var hammer := packed.instantiate() as Node3D
+	hammer.scale = Vector3(1.4, 1.4, 1.4)
+	_unshade(hammer, false)
+	hand.add_child(hammer)
+	return hand
 
 func _psx_character(n: Node) -> void:
 	if n is MeshInstance3D:
@@ -1518,6 +1438,72 @@ func _module_house(pos: Vector3, size: Vector3, face: String, shell: String, roo
 		stack.scale = Vector3(0.42, 0.42, 0.42)
 		_adopt(stack)
 
+func _open_workshop(face: String, lot_name: String) -> Dictionary:
+	# Daniel Andersson's CC0 blacksmith: closed shop on one side, open forge bay
+	# under the roof on the other. glTF +Z is that open side. Yaw it onto the street.
+	var model := _instance_building("res://assets/psx-smith/workshop.glb")
+	model.rotation.y = -PI * 0.5 if face == "w" else PI * 0.5
+	_adopt(model)
+	_obstacle(model, Vector3(0.34, 0.0, -2.35), Vector3(3.43, 2.55, 3.50))
+	_obstacle(model, Vector3(-3.20, 0.0, 0.62), Vector3(0.28, 1.9, 0.92))
+	_obstacle(model, Vector3(-1.176, 0.0, 1.934), Vector3(0.107, 0.51, 3.232))
+	_obstacle(model, Vector3(-2.204, 0.0, 2.318), Vector3(-1.072, 0.53, 3.048))
+	_obstacle(model, Vector3(-0.17, 0.0, 1.46), Vector3(0.20, 0.54, 1.90))
+	_obstacle(model, Vector3(-3.111, 0.0, 0.899), Vector3(-2.437, 1.07, 1.639))
+	_obstacle(model, Vector3(-0.935, 0.0, 0.910), Vector3(-0.492, 0.64, 1.350))
+	_obstacle(model, Vector3(-0.433, 0.0, 0.920), Vector3(0.008, 0.64, 1.362))
+	_obstacle(model, Vector3(-2.334, 0.0, 0.785), Vector3(-1.140, 0.76, 1.379))
+	var saved := _lot_root
+	_lot_root = model
+	_torch(Vector3(-0.54, 0.58, 2.55), Color(1.0, 0.42, 0.12), 3.4)
+	_sign(Vector3(-1.55, 1.28, 3.35), lot_name)
+	_wall_lantern(Vector3(-2.4, 1.55, 3.2))
+	_lot_root = saved
+	var marta_model := Vector3(-0.562, 0.0, 1.661)
+	var anvil_model := Vector3(0.036, 0.42, 1.672)
+	var marta_world: Vector3 = model.global_transform * marta_model
+	var anvil_world: Vector3 = model.global_transform * anvil_model
+	var toward := anvil_world - marta_world
+	var solid := _lot_span(model, Vector3(0.34, 0.0, -2.35), Vector3(3.43, 0.0, 3.50))
+	return {
+		"smith_pos": marta_world,
+		"smith_yaw": atan2(toward.x, toward.z),
+		"solid": solid,
+	}
+
+func _lot_span(model: Node3D, a: Vector3, b: Vector3) -> Array:
+	var min_x := 1.0e9
+	var max_x := -1.0e9
+	var min_z := 1.0e9
+	var max_z := -1.0e9
+	var parent := model.get_parent() as Node3D
+	var xs: Array[float] = [a.x, b.x]
+	var zs: Array[float] = [a.z, b.z]
+	for x in xs:
+		for z in zs:
+			var world: Vector3 = model.global_transform * Vector3(x, 0.0, z)
+			var local := world - parent.global_position
+			var yaw: float = parent.global_rotation.y
+			var c := cos(yaw)
+			var s := sin(yaw)
+			var lx := c * local.x - s * local.z
+			var lz := s * local.x + c * local.z
+			min_x = minf(min_x, lx)
+			max_x = maxf(max_x, lx)
+			min_z = minf(min_z, lz)
+			max_z = maxf(max_z, lz)
+	return [min_x, max_x, min_z, max_z]
+
+func _obstacle(host: Node3D, box_min: Vector3, box_max: Vector3) -> void:
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = box_max - box_min
+	col.shape = sh
+	body.position = (box_min + box_max) * 0.5
+	body.add_child(col)
+	host.add_child(body)
+
 func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: String, kind: String = "", street_yaw: float = 0.0) -> void:
 	# Local +X is the walker's right once street_yaw aims local -Z down the road.
 	# Face "e" therefore looks at the street from the left bank, "w" from the right.
@@ -1527,7 +1513,9 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 	add_child(pivot)
 	_lot_root = pivot
 	var at := Vector3.ZERO
-	_footprint(size, at)
+	var smith_extra: Dictionary = {}
+	if kind != "smith":
+		_footprint(size, at)
 	var front := 1.0 if face == "e" or face == "s" else -1.0
 	# Church door looks along file +Z. Tavern's long front looks along file -Z
 	# (the volume sits on +Z of that wall). Both end up yawed ±90° onto the street.
@@ -1543,7 +1531,7 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 		var yaw := PI * 0.5 if front / model_front > 0.0 else -PI * 0.5
 		_drop_model("res://assets/psx-buildings/tavern.glb", at, yaw, size, Vector3(-819.8, 0.07, -28.1), Vector3(919.4, 482.2, 475.0), 0.01, true)
 	elif kind == "smith":
-		_module_house(at, size, face, "shell_stone.glb", "roof_red.glb", "door_stone.glb", true)
+		smith_extra = _open_workshop(face, name)
 	elif kind == "hostel":
 		_module_house(at, size, face, "shell_base.glb", "roof_red.glb", "door_wood.glb", true)
 	elif kind == "stables":
@@ -1563,23 +1551,27 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 		fz = at.z + size.z * 0.5
 	else:
 		fz = at.z - size.z * 0.5
-	_sign(Vector3(fx, size.y + 0.28, fz), name)
-	_wall_lantern(Vector3(fx, 2.2, fz))
-	var glow := OmniLight3D.new()
-	glow.light_color = Color(1.0, 0.72, 0.38)
-	glow.light_energy = 1.1
-	glow.omni_range = 6.0
-	glow.position = Vector3(fx, 1.7, fz)
-	_adopt(glow)
+	if kind != "smith":
+		_sign(Vector3(fx, size.y + 0.28, fz), name)
+		_wall_lantern(Vector3(fx, 2.2, fz))
+		var glow := OmniLight3D.new()
+		glow.light_color = Color(1.0, 0.72, 0.38)
+		glow.light_energy = 1.1
+		glow.omni_range = 6.0
+		glow.position = Vector3(fx, 1.7, fz)
+		_adopt(glow)
 	_lot_root = null
-	_lots.append({
+	var lot := {
 		"pos": pos,
 		"size": size,
 		"yaw": street_yaw,
 		"face": face,
 		"kind": kind,
 		"name": name,
-	})
+	}
+	for key in smith_extra.keys():
+		lot[key] = smith_extra[key]
+	_lots.append(lot)
 
 func _shop(pos: Vector3, size: Vector3, name: String, stone: bool) -> void:
 	_house(pos, size, name, stone, "s")
@@ -1951,6 +1943,27 @@ func _anim_npcs(delta: float) -> void:
 		var pos: Vector3 = n["node"].global_position
 		var d := Vector3(tgt.x - pos.x, 0.0, tgt.z - pos.z)
 		var moving: bool = (not freeze) and d.length() > 0.2
+		if bool(n.get("station", false)):
+			n["node"].global_position = home
+			n["node"].rotation.y = float(n["work_yaw"])
+			var hand: Node3D = n.get("hammer") as Node3D
+			if hand != null:
+				var phase := fposmod(fairy_t * 1.25, 1.0)
+				var swing := -0.2
+				if phase < 0.62:
+					swing = lerpf(-0.2, -1.45, phase / 0.62)
+				elif phase < 0.78:
+					swing = lerpf(-1.45, 0.95, (phase - 0.62) / 0.16)
+				else:
+					swing = lerpf(0.95, -0.2, (phase - 0.78) / 0.22)
+				hand.rotation.x = swing
+				if n.get("body"):
+					var smith_body: Node3D = n["body"]
+					smith_body.position.y = float(n.get("body_y", 0.0))
+					var strike := clampf((swing + 1.45) / 2.4, 0.0, 1.0)
+					smith_body.rotation.x = lerpf(0.0, 0.22, strike)
+					smith_body.rotation.z = 0.0
+			continue
 		if moving:
 			var sp := 3.0 if n.get("kind", "") == "critter" else (0.7 if n.get("kind", "") == "hound" else 1.2)
 			n["node"].global_position = pos + d.normalized() * sp * delta

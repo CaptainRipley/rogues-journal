@@ -6,7 +6,7 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 
 CC0. The author says no credits are required. Credited here anyway, same place as the other packs.
 
-Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). Root rotations are baked into the vertices and the imported node basis is identity. The painted face is mesh −Z (hood is +Z), measured by rasterizing the head. The rig turns the mesh 180° so the face lies on the rig's +Z, and the look-at (`atan2` of the offset to the player) aims that axis at the camera. The pack ships a bind-pose T with no skeleton and no clips, so the rest pose has the arms lowered to a stand. Dialogue, ids, and positions are unchanged.
+Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). Root rotations are baked into the vertices and the imported node basis is identity. The painted face is mesh −Z (hood is +Z), measured by rasterizing the head. The rig turns the mesh 180° so the face lies on the rig's +Z, and the look-at (`atan2` of the offset to the player) aims that axis at the camera. The pack ships a bind-pose T with no skeleton and no clips, so the rest pose has the arms lowered to a stand. Marta keeps this mesh. She stands at the anvil and a separate hammer swings on a loop; she does not turn to face the player. The other named NPCs still do.
 
 | NPC | Mesh | Texture |
 |---|---|---|
