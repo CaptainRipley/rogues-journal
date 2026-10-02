@@ -7,7 +7,7 @@ Use original work or licensed packs. No rips.
 - Opening woods: PS1 Haunted/dreamer Nature Pack — see `godot/assets/psx-nature/CREDITS.md`
 - Town humans (Hob, Marta, Bren, Cole, Pell, Ralf): Nocturnal Watch PSX characters (CC0, toboas) — see `godot/assets/psx-characters/CREDITS.md`
 - The Closed Fist is Daniel Andersson's CC0 medieval blacksmith (textured, open forge bay) — see `godot/assets/psx-smith/CREDITS.md`
-- Shop boards and street lamps are built in the scene: low-res painted lettering, iron cages, and additive ground pools so night reads in GL Compatibility without a separate mesh pack
+- Shop boards and street lamps are built in the scene: hanging shields on iron arms, low-res lettering and trade marks, iron cages, and additive ground pools so night reads in GL Compatibility without a separate mesh pack
 - Nix stays the `nix.png` billboard
 
 Want dark castle / wet village, not sunny farm tiles.

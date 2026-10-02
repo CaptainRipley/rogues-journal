@@ -202,7 +202,7 @@ func _build_castle_gate() -> void:
 		body.add_child(col)
 		add_child(body)
 	var approach := _road_frame(_road_len - 3.4)
-	_sign(Vector3(float(approach["x"]), 2.62, float(approach["z"])), "HARTH\nKING'S GATE", float(approach["yaw"]), true, 0.0, 3.5)
+	_sign(Vector3(float(approach["x"]), 3.95, float(approach["z"])), "HARTH\nKING'S GATE", float(approach["yaw"]), true, 0.0, 3.5)
 
 func _adopt(n: Node) -> void:
 	if _lot_root != null:
@@ -445,7 +445,7 @@ func _dress_road() -> void:
 	add_child(pivot)
 	_lot_root = pivot
 	_box(Vector3(2.2, 2.4, 2.4), Vector3(0.0, 1.2, 0.0), Color(0.55, 0.42, 0.30), null, true, 2.0)
-	_sign(Vector3(1.42, 2.15, 0.15), "ROAD TAX", PI * 0.5)
+	_sign(Vector3(1.14, 2.32, 0.0), "ROAD TAX", PI * 0.5, false, 0.06, 0.0, 0.95)
 	_wall_lantern(Vector3(1.36, 1.72, -0.72), PI * 0.5)
 	_lot_root = null
 	_booth = {
@@ -919,7 +919,7 @@ func _build_ditch() -> void:
 	var welcome := _road_frame(7.4)
 	_sign(Vector3(
 		float(welcome["x"]) - float(welcome["rx"]) * 2.55,
-		2.28,
+		3.75,
 		float(welcome["z"]) - float(welcome["rz"]) * 2.55
 	), "WELCOME\nTO HARTH", float(welcome["yaw"]), true, 0.32)
 
@@ -1577,7 +1577,7 @@ func _sign_lines(text: String) -> PackedStringArray:
 		if out.is_empty():
 			out.append("?")
 		return out
-	if raw.length() <= 12:
+	if raw.length() <= 9 or not raw.contains(" "):
 		out.append(raw)
 		return out
 	var cut := raw.rfind(" ")
@@ -1601,52 +1601,272 @@ func _paint_px(img: Image, x: int, y: int, color: Color) -> void:
 		return
 	img.set_pixel(x, y, color)
 
+const _MARKS := {
+	"hammer": [
+		"#####......",
+		"#####......",
+		"#####......",
+		"..##.......",
+		"..##.......",
+		"..##.......",
+		"..##.......",
+		"..##.......",
+		"..####.....",
+	],
+	"coal": [
+		"...........",
+		"...###.....",
+		"..#####....",
+		".#######.##",
+		"###########",
+		".##########",
+		"..########.",
+		"...######..",
+		"...........",
+	],
+	"cross": [
+		".....#.....",
+		".....#.....",
+		".....#.....",
+		"...#####...",
+		".....#.....",
+		".....#.....",
+		".....#.....",
+		".....#.....",
+		"...........",
+	],
+	"house": [
+		".....#.....",
+		"...#####...",
+		"..#######..",
+		".#########.",
+		".#########.",
+		".####.#####",
+		".####.#####",
+		".####.#####",
+		"...........",
+	],
+	"bed": [
+		"...........",
+		"##.........",
+		"##.######..",
+		"#########..",
+		"#########..",
+		".#######...",
+		".#######...",
+		"...........",
+		"...........",
+	],
+	"roof": [
+		".....#.....",
+		"...#####...",
+		"..#######..",
+		".##.....##.",
+		".##.....##.",
+		".##.....##.",
+		".##.....##.",
+		"...........",
+		"...........",
+	],
+	"barrel": [
+		"....###....",
+		"...#####...",
+		"...#####...",
+		"...#####...",
+		"...#####...",
+		"...#####...",
+		"...#####...",
+		"....###....",
+		"...........",
+	],
+	"hide": [
+		"...#####...",
+		"..#######..",
+		".#########.",
+		".#########.",
+		".#########.",
+		".#########.",
+		"..##...##..",
+		"..##...##..",
+		"...........",
+	],
+	"shoe": [
+		"..#######..",
+		".##.....##.",
+		"##.......##",
+		"##...#...##",
+		"##.......##",
+		"#.........#",
+		"#.........#",
+		"#.........#",
+		"...........",
+	],
+	"candle": [
+		".....#.....",
+		"...###.....",
+		"....#......",
+		"....##.....",
+		"....##.....",
+		"....##.....",
+		"...####....",
+		"...####....",
+		"...........",
+	],
+	"coin": [
+		"...........",
+		"...#####...",
+		"..##...##..",
+		"..##.#.##..",
+		"..##...##..",
+		"..##...##..",
+		"...#####...",
+		"...........",
+		"...........",
+	],
+	"arch": [
+		"..#######..",
+		".##.....##.",
+		"##.......##",
+		"##.......##",
+		"##.......##",
+		"##.......##",
+		"##.......##",
+		"##.......##",
+		"##.......##",
+	],
+	"crown": [
+		"..#.....#..",
+		"..#.....#..",
+		".##.###.##.",
+		".#########.",
+		".#########.",
+		"..#######..",
+		"...........",
+		"...........",
+		"...........",
+	],
+}
+
+func _mark_for(text: String) -> String:
+	var key := text.to_upper()
+	if key.contains("CLOSED FIST"):
+		return "hammer"
+	if key.contains("CHAR HEAP"):
+		return "coal"
+	if key.contains("DRIP"):
+		return "cross"
+	if key.contains("MUD HOUSE"):
+		return "house"
+	if key.contains("NO BEDS"):
+		return "bed"
+	if key.contains("LEAN"):
+		return "roof"
+	if key.contains("COOPER"):
+		return "barrel"
+	if key.contains("HIDE"):
+		return "hide"
+	if key.contains("NAG"):
+		return "shoe"
+	if key.contains("TALLOW"):
+		return "candle"
+	if key.contains("ROAD TAX"):
+		return "coin"
+	if key.contains("WELCOME"):
+		return "arch"
+	if key.contains("KING"):
+		return "crown"
+	return ""
+
+func _in_shield(x: int, y: int, w: int, h: int) -> bool:
+	if x < 0 or y < 0 or x >= w or y >= h:
+		return false
+	var v := float(y) / float(maxi(h - 1, 1))
+	var inset := 1
+	if y < 3:
+		inset = 4 - y
+	if v > 0.6:
+		var t := (v - 0.6) / 0.4
+		inset = maxi(inset, int(round(lerpf(1.0, float(w) * 0.5 - 1.0, t))))
+	return x >= inset and x < w - inset
+
 func _paint_sign(text: String) -> Texture2D:
 	if _sign_tex.has(text):
 		return _sign_tex[text] as Texture2D
 	var lines := _sign_lines(text)
 	var scale := 2
-	var gap := 3 * scale
+	var gap := 2 * scale
 	var row_h := 7 * scale
 	var text_w := 0
 	for line in lines:
 		text_w = maxi(text_w, _line_px(line, scale))
 	var text_h := lines.size() * row_h + (lines.size() - 1) * gap
-	var pad := 4 * scale
-	var w := text_w + pad * 2 + scale
-	var h := text_h + pad * 2 + scale
+	var mark := _mark_for(text)
+	var icon_h := 0
+	var icon_rows: Array = []
+	if mark != "" and _MARKS.has(mark):
+		icon_rows = _MARKS[mark]
+		icon_h = icon_rows.size() * scale
+	var top_pad := 4
+	var mid_gap := 3 if icon_h > 0 else 0
+	var content_h := top_pad + icon_h + mid_gap + text_h
+	var point_h := int(float(content_h) * 0.42 / 0.58)
+	var side := 6
+	var w := maxi(text_w, 11 * scale) + side * 2 + scale
+	var h := content_h + point_h + scale
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(hash(text))
 	for py in h:
 		for px in w:
+			if not _in_shield(px, py, w, h):
+				continue
 			var n := rng.randf_range(-0.02, 0.02)
-			var grain := 0.035 if int(py / scale) % 4 == 0 else 0.0
-			var wood := Color(0.22 + n + grain, 0.13 + n * 0.5, 0.06, 1)
-			if px < 2 or py < 2 or px >= w - 2 or py >= h - 2:
-				wood = Color(0.07, 0.04, 0.03, 1)
+			var grain := 0.04 if int(py / scale) % 4 == 0 else 0.0
+			var wear := 0.85 if float(py) / float(h) > 0.82 else 1.0
+			var rim := false
+			if not _in_shield(px - 2, py, w, h) or not _in_shield(px + 2, py, w, h):
+				rim = true
+			if not _in_shield(px, py - 2, w, h) or not _in_shield(px, py + 2, w, h):
+				rim = true
+			var wood := Color(0.07, 0.04, 0.03, 1)
+			if not rim:
+				wood = Color((0.24 + n + grain) * wear, (0.15 + n * 0.5) * wear, 0.07 * wear, 1)
 			img.set_pixel(px, py, wood)
 	var ink := Color(0.9, 0.81, 0.62, 1)
 	var soot := Color(0.04, 0.025, 0.015, 1)
-	var y0 := pad
+	if icon_h > 0:
+		var icon_x := int((w - 11 * scale) / 2.0)
+		var icon_y := top_pad
+		for irow in icon_rows.size():
+			var bits: String = icon_rows[irow]
+			for icol in bits.length():
+				if bits.substr(icol, 1) != "#":
+					continue
+				for iy in scale:
+					for ix in scale:
+						var gx := icon_x + icol * scale + ix
+						var gy := icon_y + irow * scale + iy
+						_paint_px(img, gx + 1, gy + 1, soot)
+						_paint_px(img, gx, gy, ink)
+	var y0 := top_pad + icon_h + mid_gap
 	for line in lines:
-		var x0 := pad + int((text_w - _line_px(line, scale)) / 2.0)
-		var cursor := x0
+		var cursor := side + int((text_w - _line_px(line, scale)) / 2.0)
 		for i in line.length():
 			var ch := line.substr(i, 1)
 			var cols := _glyph_cols(ch)
 			if ch != " " and _SIGN_FONT.has(ch):
 				var rows: Array = _SIGN_FONT[ch]
-				for row in rows.size():
-					var bits := int(rows[row])
+				for grow in rows.size():
+					var gbits := int(rows[grow])
 					for bit in cols:
-						var on: int = (bits >> (cols - 1 - bit)) & 1
+						var on: int = (gbits >> (cols - 1 - bit)) & 1
 						if on == 0:
 							continue
 						for sy in scale:
 							for sx in scale:
 								var gx := cursor + bit * scale + sx
-								var gy := y0 + row * scale + sy
+								var gy := y0 + grow * scale + sy
 								_paint_px(img, gx + scale, gy + scale, soot)
 								_paint_px(img, gx, gy, ink)
 			elif ch != " ":
@@ -1658,22 +1878,34 @@ func _paint_sign(text: String) -> Texture2D:
 	return tex
 
 func _sign_pole(x: float, ground_y: float, top_y: float) -> void:
-	var h := top_y - ground_y
-	var at := Vector3(x, ground_y + h * 0.5, -0.04)
-	_unlit_box(Vector3(0.12, h, 0.12), at, Color(0.28, 0.17, 0.1))
+	var pole_h := top_y - ground_y
+	var at := Vector3(x, ground_y + pole_h * 0.5, -0.06)
+	_unlit_box(Vector3(0.12, pole_h, 0.12), at, Color(0.28, 0.17, 0.1))
 	var body := StaticBody3D.new()
 	var col := CollisionShape3D.new()
 	var sh := BoxShape3D.new()
-	sh.size = Vector3(0.14, h, 0.14)
+	sh.size = Vector3(0.14, pole_h, 0.14)
 	col.shape = sh
 	body.position = at
 	body.add_child(col)
 	_adopt(body)
 
-func _sign(pos: Vector3, text: String, yaw: float = 0.0, post: bool = false, tilt: float = 0.0, span: float = 0.0) -> void:
+func _sign_arm(arm_y: float, reach: float) -> Vector3:
+	var iron := Color(0.18, 0.16, 0.14)
+	_unlit_box(Vector3(0.16, 0.26, 0.05), Vector3(0, arm_y, 0.02), iron)
+	_unlit_box(Vector3(0.05, 0.045, reach), Vector3(0, arm_y, reach * 0.5), iron)
+	_unlit_box(Vector3(0.1, 0.08, 0.07), Vector3(0, arm_y, reach), iron)
+	var curl := _unlit_box(Vector3(0.035, 0.18, 0.035), Vector3(0, arm_y + 0.06, reach - 0.04), iron)
+	curl.rotation.x = -0.8
+	var curl_b := _unlit_box(Vector3(0.035, 0.12, 0.035), Vector3(0, arm_y + 0.1, reach - 0.1), iron)
+	curl_b.rotation.x = -1.6
+	_unlit_box(Vector3(0.045, 0.1, 0.045), Vector3(0, arm_y - 0.06, reach - 0.02), iron)
+	return Vector3(0, arm_y - 0.11, reach - 0.02)
+
+func _sign(pos: Vector3, text: String, yaw: float = 0.0, post: bool = false, tilt: float = 0.0, span: float = 0.0, rise: float = 0.0) -> void:
 	var tex := _paint_sign(text)
 	var img_size := tex.get_size()
-	var ppm := 0.012
+	var ppm := 0.0115
 	var board_w := float(img_size.x) * ppm
 	var board_h := float(img_size.y) * ppm
 	var pivot := Node3D.new()
@@ -1682,38 +1914,49 @@ func _sign(pos: Vector3, text: String, yaw: float = 0.0, post: bool = false, til
 	_adopt(pivot)
 	var saved := _lot_root
 	_lot_root = pivot
-	var hang := board_h * 0.5
-	var beam_y := hang + 0.16
-	var iron := Color(0.15, 0.13, 0.12)
-	var rope := Color(0.34, 0.26, 0.15)
+	var iron := Color(0.16, 0.14, 0.12)
+	var chain_col := Color(0.1, 0.09, 0.08)
+	var anchor := Vector3(0, -0.1, 0.62)
+	var chain_len := 0.34
 	if post:
 		var ground_y := -pos.y
 		if span > 0.2:
-			_sign_pole(-span * 0.5, ground_y, beam_y)
-			_sign_pole(span * 0.5, ground_y, beam_y)
-			_unlit_box(Vector3(span, 0.08, 0.08), Vector3(0, beam_y, -0.02), iron)
+			_sign_pole(-span * 0.5, ground_y, 0.0)
+			_sign_pole(span * 0.5, ground_y, 0.0)
+			_unlit_box(Vector3(span, 0.08, 0.08), Vector3(0, 0.0, 0.0), iron)
+			_unlit_box(Vector3(0.12, 0.1, 0.1), Vector3(0, -0.02, 0.04), iron)
+			anchor = Vector3(0, -0.08, 0.06)
+			chain_len = 0.28
 		else:
-			_sign_pole(0.0, ground_y, beam_y)
-			_unlit_box(Vector3(0.05, 0.05, 0.22), Vector3(0, beam_y, 0.04), iron)
+			_sign_pole(0.0, ground_y, 0.0)
+			anchor = _sign_arm(0.0, 0.62)
+			chain_len = 0.32
 	else:
-		_unlit_box(Vector3(0.045, 0.045, 0.7), Vector3(0, beam_y, -0.3), iron)
-	var chain_x: Array[float] = [-board_w * 0.28, board_w * 0.28]
+		if rise > 0.05:
+			_unlit_box(Vector3(0.06, rise, 0.06), Vector3(0, rise * 0.5, 0.04), iron)
+			anchor = _sign_arm(rise, 0.72)
+		else:
+			anchor = _sign_arm(0.0, 0.78)
+		chain_len = 0.24
+	var top_y := anchor.y - chain_len
+	var chain_x: Array[float] = [-board_w * 0.22, board_w * 0.22]
 	for cx in chain_x:
-		_unlit_box(Vector3(0.02, 0.14, 0.02), Vector3(cx, hang + 0.05, 0), rope)
+		_unlit_box(Vector3(0.02, chain_len, 0.02), Vector3(anchor.x + cx, anchor.y - chain_len * 0.5, anchor.z), chain_col)
 	var hinge := Node3D.new()
-	hinge.position = Vector3(0, hang, 0)
+	hinge.position = Vector3(anchor.x, top_y, anchor.z)
 	hinge.rotation.z = tilt
 	_adopt(hinge)
 	_lot_root = hinge
-	_unlit_box(Vector3(board_w + 0.04, board_h + 0.04, 0.05), Vector3(0, -hang, -0.015), Color(0.16, 0.09, 0.05))
 	var quad := QuadMesh.new()
 	quad.size = Vector2(board_w, board_h)
 	var face := MeshInstance3D.new()
 	face.mesh = quad
-	face.position = Vector3(0, -hang, 0.02)
+	face.position = Vector3(0, -board_h * 0.5, 0.02)
 	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	mat.alpha_scissor_threshold = 0.45
 	mat.albedo_texture = tex
 	mat.albedo_color = Color(1, 1, 1, 1)
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
@@ -1723,7 +1966,7 @@ func _sign(pos: Vector3, text: String, yaw: float = 0.0, post: bool = false, til
 	_adopt(face)
 	var back := face.duplicate() as MeshInstance3D
 	back.rotation.y = PI
-	back.position = Vector3(0, -hang, -0.05)
+	back.position = Vector3(0, -board_h * 0.5, -0.025)
 	var back_mat := mat.duplicate() as StandardMaterial3D
 	back_mat.uv1_scale = Vector3(-1, 1, 1)
 	back_mat.uv1_offset = Vector3(1, 0, 0)
@@ -1825,7 +2068,8 @@ func _open_workshop(face: String, lot_name: String) -> Dictionary:
 	var saved := _lot_root
 	_lot_root = model
 	_torch(Vector3(-0.54, 0.58, 2.55), Color(1.0, 0.42, 0.12), 3.4)
-	_sign(Vector3(-1.55, 1.08, 3.42), lot_name)
+	# Gable wall is z=3.56. The street eave sits near y=4.37, so the arm stays under it.
+	_sign(Vector3(1.89, 3.92, 3.62), lot_name, 0.0, false, 0.05)
 	_wall_lantern(Vector3(-2.35, 1.48, 3.15))
 	_lot_root = saved
 	var marta_model := Vector3(-0.562, 0.0, 1.661)
@@ -1921,30 +2165,35 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 	else:
 		fz = at.z - size.z * 0.5
 	if kind != "smith":
-		var along_sign := -1.45
-		var along_lamp := 0.85
-		var out := 0.55
+		# Bracket on the wall just under the eave. The shield hangs out over the street.
+		var mount_y := size.y - 0.22
+		var along_sign := 0.0
+		if kind == "chapel":
+			# The fitted church includes the spire, so the nave eave is about half the lot height.
+			mount_y = size.y * 0.49 - 0.08
+			along_sign = -1.55
+		var along_lamp := 1.2
 		var lamp_out := 0.36
 		var sign_yaw := 0.0
 		var sign_at := Vector3.ZERO
 		var lamp_at := Vector3.ZERO
 		if face == "e":
 			sign_yaw = PI * 0.5
-			sign_at = Vector3(fx + out, 2.4, along_sign)
+			sign_at = Vector3(fx + 0.03, mount_y, along_sign)
 			lamp_at = Vector3(fx + lamp_out, 2.05, along_lamp)
 		elif face == "w":
 			sign_yaw = -PI * 0.5
-			sign_at = Vector3(fx - out, 2.4, along_sign)
+			sign_at = Vector3(fx - 0.03, mount_y, along_sign)
 			lamp_at = Vector3(fx - lamp_out, 2.05, along_lamp)
 		elif face == "s":
 			sign_yaw = 0.0
-			sign_at = Vector3(along_sign, 2.4, fz + out)
+			sign_at = Vector3(along_sign, mount_y, fz + 0.03)
 			lamp_at = Vector3(along_lamp, 2.05, fz + lamp_out)
 		else:
 			sign_yaw = PI
-			sign_at = Vector3(along_sign, 2.4, fz - out)
+			sign_at = Vector3(along_sign, mount_y, fz - 0.03)
 			lamp_at = Vector3(along_lamp, 2.05, fz - lamp_out)
-		_sign(sign_at, name, sign_yaw)
+		_sign(sign_at, name, sign_yaw, false, 0.06)
 		_wall_lantern(lamp_at, sign_yaw)
 	_lot_root = null
 	var lot := {
