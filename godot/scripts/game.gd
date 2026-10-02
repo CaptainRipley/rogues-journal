@@ -22,6 +22,8 @@ const ROAD_KNOTS: Array[Vector2] = [
 	Vector2(0.0, -17.0),
 	Vector2(0.0, -21.2),
 ]
+# Half-width of the single street ribbon. Yards and fences stay outside it.
+const ROAD_HALF := 2.55
 
 var phase: Phase = Phase.TITLE
 var path: PathId = PathId.NONE
@@ -78,7 +80,6 @@ var fires: Array = []
 var _night_mats: Array = []
 var _pool_tex: Texture2D
 var _flame_tex: Texture2D
-var _puddle_tex: Texture2D
 var _dirt_tex: Texture2D
 var _fence_spots: Array[Vector3] = []
 var _sign_tex: Dictionary = {}
@@ -146,7 +147,7 @@ func _build_world() -> void:
 	floor_body.add_child(floor_col)
 	add_child(floor_body)
 	_trace_road()
-	_cobble_path()
+	_pave_road()
 	_place_town()
 	_build_castle_gate()
 	_plant_forest()
@@ -666,25 +667,61 @@ func _ground_patch(pos: Vector3, size: Vector2, mat: Material, yaw := 0.0) -> vo
 	mi.rotation.y = yaw
 	add_child(mi)
 
-func _cobble_path() -> void:
-	var cobble := _tile_mat("res://assets/psx-nature/cobble.png", 3.4, Color(0.83, 0.8, 0.72), 18.0)
-	_watch_night(cobble)
-	var step := 2.15
-	var d := 5.0
-	while d < _road_len - 2.4:
-		var frame := _road_frame(d)
-		var along := atan2(float(frame["tx"]), float(frame["tz"]))
-		var lift := 0.018 if int(d / step) % 2 == 0 else 0.019
-		_ground_patch(Vector3(float(frame["x"]), lift, float(frame["z"])), Vector2(5.1, step * 1.2), cobble, along)
-		var w := 0.55 + absf(fmod(d * 1.7, 7.0)) * 0.05
-		for side in [-1.0, 1.0]:
-			var ox: float = float(side) * (2.35 + w * 0.35)
-			_ground_patch(Vector3(
-				float(frame["x"]) + float(frame["rx"]) * ox,
-				0.017,
-				float(frame["z"]) + float(frame["rz"]) * ox
-			), Vector2(w, step * 1.2), cobble, along)
+func _road_edge(dist: float, lateral: float) -> Vector3:
+	var frame := _road_frame(dist)
+	return Vector3(
+		float(frame["x"]) + float(frame["rx"]) * lateral,
+		0.028,
+		float(frame["z"]) + float(frame["rz"]) * lateral
+	)
+
+func _road_vert(st: SurfaceTool, p: Vector3, u: float, v: float) -> void:
+	st.set_normal(Vector3.UP)
+	st.set_uv(Vector2(u, v))
+	st.add_vertex(p)
+
+func _pave_road() -> void:
+	# One ribbon along the S, constant width, so the street is not a row of quads.
+	var mat := _dirt_mat(Color(1.0, 0.96, 0.88), 1.0)
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_watch_night(mat)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var start := 5.0
+	var finish := maxf(_road_len - 1.1, start + 4.0)
+	var step := 0.55
+	var half := ROAD_HALF
+	var prev_d := start
+	var prev_l := _road_edge(start, -half)
+	var prev_r := _road_edge(start, half)
+	var d := start + step
+	var tris := 0
+	while d <= finish + step:
+		var here := minf(d, finish)
+		var left := _road_edge(here, -half)
+		var right := _road_edge(here, half)
+		var v0 := prev_d * 0.28
+		var v1 := here * 0.28
+		_road_vert(st, prev_l, 0.0, v0)
+		_road_vert(st, prev_r, 3.2, v0)
+		_road_vert(st, left, 0.0, v1)
+		_road_vert(st, prev_r, 3.2, v0)
+		_road_vert(st, right, 3.2, v1)
+		_road_vert(st, left, 0.0, v1)
+		prev_l = left
+		prev_r = right
+		prev_d = here
+		tris += 2
+		if here >= finish - 0.001:
+			break
 		d += step
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	if tris < 8:
+		push_error("Road ribbon is too short")
 
 func _plant_grass_ground() -> void:
 	var grass := _tile_mat("res://assets/psx-nature/grass_tile.png", 2.2, Color(0.77, 0.83, 0.64))
@@ -2106,28 +2143,6 @@ func _dirt_mat(tint: Color, repeat: float) -> StandardMaterial3D:
 	m.uv1_scale = Vector3(repeat, repeat, 1.0)
 	return m
 
-func _puddle_texture() -> Texture2D:
-	if _puddle_tex != null:
-		return _puddle_tex
-	var n := 16
-	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
-	var mid := (float(n) - 1.0) * 0.5
-	for y in n:
-		for x in n:
-			var dx := (float(x) - mid) / mid
-			var dy := (float(y) - mid) / mid
-			var e := dx * dx + dy * dy
-			var a := 0.0
-			if e < 0.55:
-				a = 1.0
-			elif e < 0.82:
-				a = 0.72
-			elif e < 1.0:
-				a = 0.28
-			img.set_pixel(x, y, Color(1, 1, 1, a))
-	_puddle_tex = ImageTexture.create_from_image(img)
-	return _puddle_tex
-
 func _workshop_part(model: Node, part_name: String) -> MeshInstance3D:
 	var stack: Array = [model]
 	while stack.size() > 0:
@@ -2346,6 +2361,8 @@ func _yard_blocked(pos: Vector3, radius: float, people: Array[Vector3]) -> bool:
 		return true
 	if _near_street_lamp(pos.x, pos.z):
 		return true
+	if _road_dist_to(pos.x, pos.z) < ROAD_HALF + radius:
+		return true
 	for lot in _lots:
 		var door := _porch(lot, 0.0, 1.15)
 		if Vector2(pos.x - door.x, pos.z - door.z).length() < 1.4 + radius:
@@ -2397,48 +2414,7 @@ func _spawn_yard_piece(model: Node3D, part: String, pos: Vector3, yaw: float) ->
 	if absf(tilt) < 0.01:
 		_obstacle(pivot, Vector3(-aabb.size.x * 0.5, 0.0, -aabb.size.z * 0.5), Vector3(aabb.size.x * 0.5, aabb.size.y, aabb.size.z * 0.5))
 
-func _paint_lot_mud(lot: Dictionary, mud: Material, wet: Material, puddle: Material, idx: int) -> void:
-	var face_pt := _porch(lot, 0.0, 0.0)
-	var along := _road_along(face_pt.x, face_pt.z)
-	var frame := _road_frame(along)
-	var lateral := (face_pt.x - float(frame["x"])) * float(frame["rx"]) + (face_pt.z - float(frame["z"])) * float(frame["rz"])
-	var side := 1.0 if lateral >= 0.0 else -1.0
-	var size: Vector3 = lot["size"]
-	var half := clampf(size.z * 0.36, 1.8, 3.2)
-	var y0 := 0.027 + float(idx) * 0.00025
-	var d := along - half
-	while d < along + half:
-		var f := _road_frame(d)
-		var yaw := atan2(float(f["tx"]), float(f["tz"]))
-		var wobble := sin(d * 1.7 + float(idx)) * 0.28
-		_ground_patch(Vector3(
-			float(f["x"]) + float(f["rx"]) * wobble,
-			y0,
-			float(f["z"]) + float(f["rz"]) * wobble
-		), Vector2(4.4, 1.7), mud, yaw)
-		var rut_off := sin(d * 0.8) * 0.55
-		_ground_patch(Vector3(
-			float(f["x"]) + float(f["rx"]) * rut_off,
-			0.034,
-			float(f["z"]) + float(f["rz"]) * rut_off
-		), Vector2(0.55, 1.45), wet, yaw)
-		d += 1.65
-	var pf := _road_frame(along + sin(float(idx) * 1.3) * 0.6)
-	var pyaw := atan2(float(pf["tx"]), float(pf["tz"]))
-	_ground_patch(Vector3(
-		float(pf["x"]) + side * float(pf["rx"]) * 0.45,
-		0.039,
-		float(pf["z"]) + side * float(pf["rz"]) * 0.45
-	), Vector2(1.15, 0.72), puddle, pyaw)
-	var af := _road_frame(along)
-	var ayaw := atan2(float(af["tx"]), float(af["tz"]))
-	_ground_patch(Vector3(
-		float(af["x"]) + side * float(af["rx"]) * 3.7,
-		y0 + 0.001,
-		float(af["z"]) + side * float(af["rz"]) * 3.7
-	), Vector2(1.9, size.z * 0.72), mud, ayaw)
-
-func _dress_other_yards(model: Node3D, mud: Material, wet: Material, puddle: Material) -> void:
+func _dress_other_yards(model: Node3D) -> void:
 	var people := _yard_people()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2204
@@ -2450,7 +2426,6 @@ func _dress_other_yards(model: Node3D, mud: Material, wet: Material, puddle: Mat
 		if lot_name == "THE CLOSED FIST":
 			continue
 		idx += 1
-		_paint_lot_mud(lot, mud, wet, puddle, idx)
 		var size: Vector3 = lot["size"]
 		var yaw: float = float(lot["yaw"])
 		var pieces: Array = _lot_clutter(lot_name)
@@ -2570,65 +2545,6 @@ func _dress_fist_yard() -> void:
 		push_error("Fist lip is %.2f m off the road" % lateral)
 	var smith_side := 1.0 if lateral >= 0.0 else -1.0
 	var fence_side := -smith_side
-	var mud := _dirt_mat(Color(1.0, 0.96, 0.88), 2.4)
-	var wet := _dirt_mat(Color(0.74, 0.66, 0.56), 1.6)
-	_watch_night(mud)
-	_watch_night(wet)
-	var puddle := StandardMaterial3D.new()
-	puddle.albedo_texture = _puddle_texture()
-	puddle.albedo_color = Color(0.2, 0.18, 0.15)
-	puddle.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	puddle.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	puddle.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	puddle.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	puddle.alpha_scissor_threshold = 0.35
-	puddle.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_watch_night(puddle)
-	var d := along - 7.2
-	var seg := 0
-	while d < along + 7.2:
-		var f := _road_frame(d)
-		var yaw := atan2(float(f["tx"]), float(f["tz"]))
-		var wobble := sin(d * 1.37) * 0.45
-		var lift := 0.028 + float(seg % 3) * 0.001
-		_ground_patch(Vector3(
-			float(f["x"]) + float(f["rx"]) * wobble,
-			lift,
-			float(f["z"]) + float(f["rz"]) * wobble
-		), Vector2(6.8, 2.35), mud, yaw + sin(d * 0.6) * 0.05)
-		for rut_side in [-0.95, 0.7]:
-			var rut_off := float(rut_side) + sin(d * 0.9 + float(rut_side)) * 0.18
-			_ground_patch(Vector3(
-				float(f["x"]) + float(f["rx"]) * rut_off,
-				0.033,
-				float(f["z"]) + float(f["rz"]) * rut_off
-			), Vector2(0.72, 2.05), wet, yaw)
-		d += 1.65
-		seg += 1
-	var puddles: Array = [
-		[-4.4, -0.55, 1.9, 1.15],
-		[-1.3, 0.85, 1.35, 0.85],
-		[1.6, -1.05, 1.7, 1.05],
-		[4.5, 0.35, 1.15, 0.75],
-	]
-	for spot in puddles:
-		var pd := along + float(spot[0])
-		var pf := _road_frame(pd)
-		var pyaw := atan2(float(pf["tx"]), float(pf["tz"]))
-		var plat := float(spot[1])
-		_ground_patch(Vector3(
-			float(pf["x"]) + float(pf["rx"]) * plat,
-			0.038,
-			float(pf["z"]) + float(pf["rz"]) * plat
-		), Vector2(float(spot[2]), float(spot[3])), puddle, pyaw)
-	for apron in [-2.4, -0.6, 1.2, 2.8]:
-		var af := _road_frame(along + float(apron))
-		var ayaw := atan2(float(af["tx"]), float(af["tz"]))
-		_ground_patch(Vector3(
-			float(af["x"]) + smith_side * float(af["rx"]) * 3.85,
-			0.029,
-			float(af["z"]) + smith_side * float(af["rz"]) * 3.85
-		), Vector2(2.6, 2.1), mud, ayaw)
 	var run_pos: Array[Vector3] = []
 	var run_h: Array[float] = []
 	var post_n := 0
@@ -2655,9 +2571,9 @@ func _dress_fist_yard() -> void:
 				pz + fence_side * float(ff["rz"]) * 0.55
 			), float(ff["yaw"]) + rng.randf() * 0.6, 0.85 + rng.randf() * 0.7)
 			_fist_weed(Vector3(
-				px - fence_side * float(ff["rx"]) * 0.7,
+				px + fence_side * float(ff["rx"]) * 0.35,
 				0.0,
-				pz - fence_side * float(ff["rz"]) * 0.7
+				pz + fence_side * float(ff["rz"]) * 0.35
 			), float(ff["yaw"]) + 0.8, 0.65 + rng.randf() * 0.4)
 		fd += 1.5
 		post_i += 1
@@ -2671,7 +2587,7 @@ func _dress_fist_yard() -> void:
 			0.0,
 			float(ef["z"]) + smith_side * float(ef["rz"]) * 4.15
 		), float(ef["yaw"]) + float(end_off) * 0.1, 1.05)
-	_dress_other_yards(model, mud, wet, puddle)
+	_dress_other_yards(model)
 
 func _open_workshop(face: String, lot_name: String) -> Dictionary:
 	# Daniel Andersson's CC0 blacksmith: closed shop on one side, open forge bay
