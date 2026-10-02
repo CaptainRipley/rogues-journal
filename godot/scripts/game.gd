@@ -79,6 +79,8 @@ var _night_mats: Array = []
 var _pool_tex: Texture2D
 var _flame_tex: Texture2D
 var _puddle_tex: Texture2D
+var _dirt_tex: Texture2D
+var _fence_spots: Array[Vector3] = []
 var _sign_tex: Dictionary = {}
 var _lot_root: Node3D = null
 var _lots: Array = []
@@ -410,8 +412,8 @@ func _place_town() -> void:
 			d += 0.2
 		if not found:
 			push_error("No room on the S-curve for %s" % name)
-	_dress_fist_yard()
 	_dress_road()
+	_dress_fist_yard()
 	if _lots.size() != 10:
 		push_error("S-curve town placed %d lots" % _lots.size())
 	for i in _lots.size():
@@ -2068,6 +2070,42 @@ func _road_along(x: float, z: float) -> float:
 			along = lerpf(_road_dst[i], _road_dst[i + 1], t)
 	return along
 
+func _wet_dirt_texture() -> Texture2D:
+	# mud.png bottoms out at black, so a tint cannot lift it. Raise the floor
+	# into wet brown while keeping the grain, near the cobble's brightness.
+	if _dirt_tex != null:
+		return _dirt_tex
+	var src := load("res://assets/mud.png") as Texture2D
+	var img := src.get_image()
+	if img == null or img.is_empty():
+		push_error("mud.png has no pixels")
+		return src
+	img = img.duplicate()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			img.set_pixel(x, y, Color(
+				clampf(0.18 + c.r * 1.05, 0.0, 1.0),
+				clampf(0.15 + c.g * 1.05, 0.0, 1.0),
+				clampf(0.11 + c.b * 1.05, 0.0, 1.0),
+				1.0
+			))
+	_dirt_tex = ImageTexture.create_from_image(img)
+	return _dirt_tex
+
+func _dirt_mat(tint: Color, repeat: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _wet_dirt_texture()
+	m.albedo_color = tint
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.uv1_scale = Vector3(repeat, repeat, 1.0)
+	return m
+
 func _puddle_texture() -> Texture2D:
 	if _puddle_tex != null:
 		return _puddle_tex
@@ -2200,7 +2238,7 @@ func _fist_fence_blocked(dist: float, side: float) -> bool:
 			return true
 	return false
 
-func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNumberGenerator) -> void:
+func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNumberGenerator, bushes := true) -> void:
 	if pts.size() < 2:
 		return
 	var post_col := Color(0.29, 0.22, 0.15)
@@ -2212,6 +2250,7 @@ func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNum
 		_lot_root = null
 		_unlit_box(Vector3(0.14, h, 0.14), pos + Vector3(0.0, h * 0.5, 0.0), post_col)
 		_obstacle(self, pos + Vector3(-0.07, 0.0, -0.07), pos + Vector3(0.07, h, 0.07))
+		_fence_spots.append(pos)
 		if i == 0:
 			continue
 		var prev := pts[i - 1]
@@ -2230,6 +2269,8 @@ func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNum
 		_obstacle(pivot, Vector3(-0.04, low - 0.04, -span * 0.5), Vector3(0.04, low + 0.04, span * 0.5))
 		_obstacle(pivot, Vector3(-0.04, high - 0.04, -span * 0.5), Vector3(0.04, high + 0.04, span * 0.5))
 	_lot_root = saved
+	if not bushes:
+		return
 	for end_i in [0, pts.size() - 1]:
 		var end_pos := pts[end_i]
 		var end_d := _road_along(end_pos.x, end_pos.z)
@@ -2244,7 +2285,267 @@ func _raise_fence_run(pts: Array[Vector3], heights: Array[float], rng: RandomNum
 		if not _inside_lot(bush_at.x, bush_at.z, 0.55):
 			_psx_tree("bush", bush_at, rng)
 
+func _lot_clutter(lot_name: String) -> Array:
+	if lot_name == "COOPER":
+		return ["Barrel1", "Barrel2", "pot"]
+	elif lot_name == "HIDE WORKS":
+		return ["Barrel1", "ShortLog", "pot"]
+	elif lot_name == "CHAR HEAP":
+		return ["PileofChoppedWood", "ShortLog", "pot"]
+	elif lot_name == "TALLOW":
+		return ["pot", "pot", "Barrel2"]
+	elif lot_name == "MUD HOUSE":
+		return ["Barrel1", "pot"]
+	elif lot_name == "NO BEDS":
+		return ["Barrel2", "pot"]
+	elif lot_name == "LEAN-TO":
+		return ["PileofChoppedWood", "WoodCutters Axe"]
+	elif lot_name == "THE KING'S NAGS":
+		return ["PileOfLogs", "Barrel1"]
+	elif lot_name == "ST. DRIP":
+		return ["pot", "ShortLog"]
+	else:
+		push_error("No yard clutter for %s" % lot_name)
+		return ["Barrel1"]
+
+func _near_street_lamp(x: float, z: float) -> bool:
+	var d := 18.0
+	var lamp_side := 1.0
+	while d < _road_len - 14.0:
+		var frame := _road_frame(d)
+		var lx: float = float(frame["x"]) + lamp_side * float(frame["rx"]) * 3.2
+		var lz: float = float(frame["z"]) + lamp_side * float(frame["rz"]) * 3.2
+		if Vector2(x - lx, z - lz).length() < 1.05:
+			return true
+		lamp_side = -lamp_side
+		d += 18.0
+	var last := _road_frame(_road_len - 8.0)
+	for gate_side_v in [-1.0, 1.0]:
+		var gate_side := float(gate_side_v)
+		var gx: float = float(last["x"]) + gate_side * float(last["rx"]) * 2.7
+		var gz: float = float(last["z"]) + gate_side * float(last["rz"]) * 2.7
+		if Vector2(x - gx, z - gz).length() < 1.05:
+			return true
+	return false
+
+func _yard_people() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	var pell := _lot_named("ST. DRIP")
+	var hide := _lot_named("HIDE WORKS")
+	if not pell.is_empty():
+		pts.append(_porch(pell, 0.4, 1.9))
+	if not hide.is_empty():
+		pts.append(_porch(hide, 1.2, 1.7))
+		pts.append(_porch(hide, -1.4, 2.6))
+	return pts
+
+func _yard_blocked(pos: Vector3, radius: float, people: Array[Vector3]) -> bool:
+	if _inside_lot(pos.x, pos.z, 0.05):
+		return true
+	if not _booth.is_empty() and _point_in_lot(pos.x, pos.z, _booth, 0.45):
+		return true
+	if _near_street_lamp(pos.x, pos.z):
+		return true
+	for lot in _lots:
+		var door := _porch(lot, 0.0, 1.15)
+		if Vector2(pos.x - door.x, pos.z - door.z).length() < 1.4 + radius:
+			return true
+		var lamp := _porch(lot, 1.2, 0.45)
+		if Vector2(pos.x - lamp.x, pos.z - lamp.z).length() < 0.75 + radius:
+			return true
+	for person in people:
+		if Vector2(pos.x - person.x, pos.z - person.z).length() < 1.15 + radius:
+			return true
+	for spot in _fence_spots:
+		if Vector2(pos.x - spot.x, pos.z - spot.z).length() < 0.85 + radius:
+			return true
+	return false
+
+func _spawn_yard_piece(model: Node3D, part: String, pos: Vector3, yaw: float) -> void:
+	if part == "pot":
+		var pot := MeshInstance3D.new()
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.18
+		mesh.bottom_radius = 0.13
+		mesh.height = 0.32
+		mesh.radial_segments = 6
+		pot.mesh = mesh
+		pot.position = pos + Vector3(0.0, 0.16, 0.0)
+		pot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.52, 0.34, 0.22)
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		pot.material_override = mat
+		add_child(pot)
+		_obstacle(self, pos + Vector3(-0.16, 0.0, -0.16), pos + Vector3(0.16, 0.32, 0.16))
+		return
+	var src := _workshop_part(model, part)
+	if src == null:
+		return
+	var aabb := src.get_aabb()
+	var tilt := 0.85 if part == "WoodCutters Axe" else 0.0
+	var pivot := Node3D.new()
+	pivot.position = pos + Vector3(0.0, sin(absf(tilt)) * aabb.size.y * 0.22, 0.0)
+	pivot.rotation = Vector3(tilt, yaw, 0.0)
+	var copy := src.duplicate() as MeshInstance3D
+	var center := aabb.get_center()
+	copy.position = Vector3(-center.x, -aabb.position.y, -center.z)
+	pivot.add_child(copy)
+	add_child(pivot)
+	if absf(tilt) < 0.01:
+		_obstacle(pivot, Vector3(-aabb.size.x * 0.5, 0.0, -aabb.size.z * 0.5), Vector3(aabb.size.x * 0.5, aabb.size.y, aabb.size.z * 0.5))
+
+func _paint_lot_mud(lot: Dictionary, mud: Material, wet: Material, puddle: Material, idx: int) -> void:
+	var face_pt := _porch(lot, 0.0, 0.0)
+	var along := _road_along(face_pt.x, face_pt.z)
+	var frame := _road_frame(along)
+	var lateral := (face_pt.x - float(frame["x"])) * float(frame["rx"]) + (face_pt.z - float(frame["z"])) * float(frame["rz"])
+	var side := 1.0 if lateral >= 0.0 else -1.0
+	var size: Vector3 = lot["size"]
+	var half := clampf(size.z * 0.36, 1.8, 3.2)
+	var y0 := 0.027 + float(idx) * 0.00025
+	var d := along - half
+	while d < along + half:
+		var f := _road_frame(d)
+		var yaw := atan2(float(f["tx"]), float(f["tz"]))
+		var wobble := sin(d * 1.7 + float(idx)) * 0.28
+		_ground_patch(Vector3(
+			float(f["x"]) + float(f["rx"]) * wobble,
+			y0,
+			float(f["z"]) + float(f["rz"]) * wobble
+		), Vector2(4.4, 1.7), mud, yaw)
+		var rut_off := sin(d * 0.8) * 0.55
+		_ground_patch(Vector3(
+			float(f["x"]) + float(f["rx"]) * rut_off,
+			0.034,
+			float(f["z"]) + float(f["rz"]) * rut_off
+		), Vector2(0.55, 1.45), wet, yaw)
+		d += 1.65
+	var pf := _road_frame(along + sin(float(idx) * 1.3) * 0.6)
+	var pyaw := atan2(float(pf["tx"]), float(pf["tz"]))
+	_ground_patch(Vector3(
+		float(pf["x"]) + side * float(pf["rx"]) * 0.45,
+		0.039,
+		float(pf["z"]) + side * float(pf["rz"]) * 0.45
+	), Vector2(1.15, 0.72), puddle, pyaw)
+	var af := _road_frame(along)
+	var ayaw := atan2(float(af["tx"]), float(af["tz"]))
+	_ground_patch(Vector3(
+		float(af["x"]) + side * float(af["rx"]) * 3.7,
+		y0 + 0.001,
+		float(af["z"]) + side * float(af["rz"]) * 3.7
+	), Vector2(1.9, size.z * 0.72), mud, ayaw)
+
+func _dress_other_yards(model: Node3D, mud: Material, wet: Material, puddle: Material) -> void:
+	var people := _yard_people()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2204
+	var dressed := 0
+	var fenced := 0
+	var idx := 0
+	for lot in _lots:
+		var lot_name := str(lot["name"])
+		if lot_name == "THE CLOSED FIST":
+			continue
+		idx += 1
+		_paint_lot_mud(lot, mud, wet, puddle, idx)
+		var size: Vector3 = lot["size"]
+		var yaw: float = float(lot["yaw"])
+		var pieces: Array = _lot_clutter(lot_name)
+		var placed := 0
+		var used: Array[int] = []
+		var clutter_pts: Array[Vector3] = []
+		var half_z := size.z * 0.5
+		var candidates: Array[Vector2] = [
+			Vector2(-(half_z - 0.85), 0.58),
+			Vector2(-(half_z - 0.85), 1.2),
+			Vector2(half_z - 0.85, 0.58),
+			Vector2(half_z - 0.85, 1.2),
+			Vector2(-(half_z + 0.25), 1.15),
+			Vector2(half_z + 0.25, 1.15),
+		]
+		for i in pieces.size():
+			var part := str(pieces[i])
+			var radius := 0.72 if part == "PileOfLogs" else 0.36
+			var pos := Vector3.ZERO
+			var found_spot := false
+			for spot_i in candidates.size():
+				if used.has(spot_i):
+					continue
+				var spot: Vector2 = candidates[spot_i]
+				var try_pos := _porch(lot, spot.x, spot.y)
+				if _yard_blocked(try_pos, radius, people):
+					continue
+				pos = try_pos
+				used.append(spot_i)
+				found_spot = true
+				break
+			if not found_spot:
+				push_error("%s clutter %s blocks a path" % [lot_name, part])
+				continue
+			var spin := yaw + float(i) * 0.7
+			if part == "PileOfLogs":
+				spin = yaw + PI * 0.5
+			_spawn_yard_piece(model, part, pos, spin)
+			clutter_pts.append(pos)
+			placed += 1
+		if placed == 0:
+			push_error("%s yard has no clutter" % lot_name)
+		else:
+			dressed += 1
+		var wings := 0
+		for end_sign_v in [-1.0, 1.0]:
+			var end_sign := float(end_sign_v)
+			var run_pos: Array[Vector3] = []
+			var run_h: Array[float] = []
+			for step_v in [0.45, 1.6, 2.75]:
+				var step := float(step_v)
+				for out_v in [0.8, 1.35]:
+					var post_at := _porch(lot, end_sign * (size.z * 0.5 + step), float(out_v))
+					if _yard_blocked(post_at, 0.15, people):
+						continue
+					if _road_dist_to(post_at.x, post_at.z) < 2.7:
+						continue
+					var crowded := false
+					for spot in _fence_spots:
+						if post_at.distance_to(spot) < 1.2:
+							crowded = true
+							break
+					for queued in run_pos:
+						if post_at.distance_to(queued) < 0.95:
+							crowded = true
+							break
+					for clutter_pt in clutter_pts:
+						if post_at.distance_to(clutter_pt) < 0.9:
+							crowded = true
+							break
+					if crowded:
+						continue
+					run_pos.append(post_at)
+					run_h.append(0.9 + float(idx % 3) * 0.08)
+					if run_pos.size() == 2:
+						break
+				if run_pos.size() == 2:
+					break
+			if run_pos.size() >= 2:
+				_raise_fence_run(run_pos, run_h, rng, false)
+				fenced += 1
+				wings += 1
+		if wings == 0:
+			push_error("%s yard has no fence" % lot_name)
+		for weed_along in [-(size.z * 0.5 - 0.25), size.z * 0.5 - 0.25, size.z * 0.5 + 0.8]:
+			var weed_at := _porch(lot, float(weed_along), 0.4 if weed_along < 0.0 else 1.45)
+			if not _inside_lot(weed_at.x, weed_at.z, 0.0):
+				_fist_weed(weed_at, yaw + float(weed_along), 0.75 + rng.randf() * 0.45)
+	if dressed < 9:
+		push_error("Dressed %d yards besides the Fist" % dressed)
+	if fenced < 6:
+		push_error("Yard fences landed on %d wings" % fenced)
+
 func _dress_fist_yard() -> void:
+	_fence_spots = []
 	var lot := _lot_named("THE CLOSED FIST")
 	if lot.is_empty() or not (lot.get("model") is Node3D):
 		push_error("Closed Fist yard has no workshop")
@@ -2269,13 +2570,13 @@ func _dress_fist_yard() -> void:
 		push_error("Fist lip is %.2f m off the road" % lateral)
 	var smith_side := 1.0 if lateral >= 0.0 else -1.0
 	var fence_side := -smith_side
-	var mud := _tile_mat("res://assets/mud.png", 2.4, Color(0.56, 0.43, 0.30))
-	var wet := _tile_mat("res://assets/mud.png", 1.6, Color(0.38, 0.29, 0.20))
+	var mud := _dirt_mat(Color(1.0, 0.96, 0.88), 2.4)
+	var wet := _dirt_mat(Color(0.74, 0.66, 0.56), 1.6)
 	_watch_night(mud)
 	_watch_night(wet)
 	var puddle := StandardMaterial3D.new()
 	puddle.albedo_texture = _puddle_texture()
-	puddle.albedo_color = Color(0.26, 0.28, 0.30)
+	puddle.albedo_color = Color(0.2, 0.18, 0.15)
 	puddle.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	puddle.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	puddle.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
@@ -2370,6 +2671,7 @@ func _dress_fist_yard() -> void:
 			0.0,
 			float(ef["z"]) + smith_side * float(ef["rz"]) * 4.15
 		), float(ef["yaw"]) + float(end_off) * 0.1, 1.05)
+	_dress_other_yards(model, mud, wet, puddle)
 
 func _open_workshop(face: String, lot_name: String) -> Dictionary:
 	# Daniel Andersson's CC0 blacksmith: closed shop on one side, open forge bay
