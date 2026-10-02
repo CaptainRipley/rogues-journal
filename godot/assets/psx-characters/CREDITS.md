@@ -6,7 +6,7 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 
 CC0. The author says no credits are required. Credited here anyway, same place as the other packs.
 
-Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). The face is along +Z in the vertex data. Root and other near-zero-w rotations are baked into the vertices (a 180° yaw on every rig, and the bartender's 180° X plus its 0.0001 scale), so a strict importer cannot drop them and turn the cast around. The look-at (`atan2` of the offset to the player) turns that +Z face toward the camera. The pack ships a bind-pose T with no skeleton and no clips, so the rest pose has the arms lowered to a stand. Dialogue, ids, and positions are unchanged.
+Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). Root rotations are baked into the vertices and the imported node basis is identity. The painted face is mesh −Z (hood is +Z), measured by rasterizing the head. The rig turns the mesh 180° so the face lies on the rig's +Z, and the look-at (`atan2` of the offset to the player) aims that axis at the camera. The pack ships a bind-pose T with no skeleton and no clips, so the rest pose has the arms lowered to a stand. Dialogue, ids, and positions are unchanged.
 
 | NPC | Mesh | Texture |
 |---|---|---|

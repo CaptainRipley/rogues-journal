@@ -760,6 +760,12 @@ func _rig_person(id: String) -> Node3D:
 		return g
 	var body: Node3D = packed.instantiate() as Node3D
 	body.name = "Mesh"
+	# Imported in Godot 4.7.2 with an identity basis (root and mesh basis.z are +Z).
+	# Rasterizing the painted head puts the face on mesh -Z and the hood on +Z
+	# for the peasant, the nun, and the bartender. The shared look-at aims this
+	# rig's +Z at the player, which is also how the sprite critters face. A half
+	# turn brings the face around onto that axis.
+	body.rotation.y = PI
 	_psx_character(body)
 	bob.add_child(body)
 	g.set_meta("body", bob)
@@ -936,40 +942,109 @@ func _sign(pos: Vector3, text: String) -> void:
 	lab.position = pos + Vector3(0, 0, 0.08)
 	add_child(lab)
 
-func _wall_card(tex: Texture2D, pos: Vector3, yaw: float, width: float, height: float) -> void:
-	var mesh := QuadMesh.new()
-	mesh.orientation = PlaneMesh.FACE_Z
-	mesh.size = Vector2(width, height)
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.position = pos
-	mi.rotation.y = yaw
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	mat.cull_mode = BaseMaterial3D.CULL_BACK
-	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-	var img: Image = tex.get_image()
-	if img != null and img.detect_alpha() != Image.ALPHA_NONE:
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-		mat.alpha_scissor_threshold = 0.5
-		mat.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
-	mi.material_override = mat
-	add_child(mi)
+func _footprint(size: Vector3, pos: Vector3) -> void:
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = size
+	col.shape = sh
+	body.position = pos + Vector3(0, size.y * 0.5, 0)
+	body.add_child(col)
+	add_child(body)
 
-func _house(pos: Vector3, size: Vector3, name: String, stone: bool, face: String, art: String = "") -> void:
-	# The painted card only covers the street face. Sides and backs are this box.
-	# stone.png is already dark; multiplying a brown tint crushed those faces to
-	# black in the unshaded pass, which reads as missing ground behind the row.
-	var wall_tex: Texture2D = stone_tex if stone else null
-	var wall_color := Color(2.4, 2.15, 1.9) if stone else Color(0.74, 0.54, 0.38)
-	_box(size, pos + Vector3(0, size.y * 0.5, 0), wall_color, wall_tex, true, 2.0)
-	_box(Vector3(size.x + 0.9, 0.22, size.z + 0.7), pos + Vector3(0, size.y + 0.08, 0), Color(0.58, 0.30, 0.18), null, true, 1.0)
-	_box(Vector3(0.55, 1.15, 0.55), pos + Vector3(size.x * 0.28, size.y + 0.7, -size.z * 0.22), Color(0.52, 0.40, 0.32), stone_tex, true, 1.0)
+func _street_pose(pos: Vector3, size: Vector3, face: String, outward: float, along: float, height: float) -> Array:
+	var yaw := 0.0
+	var p := pos
+	if face == "e":
+		yaw = PI * 0.5
+		p = pos + Vector3(size.x * 0.5 + outward, height, along)
+	elif face == "w":
+		yaw = -PI * 0.5
+		p = pos + Vector3(-size.x * 0.5 - outward, height, along)
+	elif face == "s":
+		p = pos + Vector3(along, height, size.z * 0.5 + outward)
+	else:
+		yaw = PI
+		p = pos + Vector3(along, height, -size.z * 0.5 - outward)
+	return [p, yaw]
+
+func _instance_building(path: String) -> Node3D:
+	var packed: PackedScene = load(path) as PackedScene
+	if packed == null:
+		push_error("Missing building %s" % path)
+		return Node3D.new()
+	var n := packed.instantiate() as Node3D
+	_unshade(n, false)
+	return n
+
+func _drop_model(path: String, pos: Vector3, yaw: float, lot: Vector3, file_min: Vector3, file_max: Vector3, unit: float, fit_height: bool) -> void:
+	var src_size := (file_max - file_min) * unit
+	if src_size.x < 0.001 or src_size.y < 0.001 or src_size.z < 0.001:
+		return
+	var pivot := Node3D.new()
+	pivot.position = pos
+	pivot.rotation.y = yaw
+	add_child(pivot)
+	var swap := absf(sin(yaw)) > 0.5
+	var span_x := lot.z if swap else lot.x
+	var span_z := lot.x if swap else lot.z
+	var sx := span_x / src_size.x
+	var sz := span_z / src_size.z
+	var sy := lot.y / src_size.y if fit_height else (sx + sz) * 0.5 * 0.55
+	var mesh := _instance_building(path)
+	var sc := Vector3(sx, sy, sz) * unit
+	mesh.scale = sc
+	var center := (file_min + file_max) * 0.5
+	mesh.position = Vector3(-center.x * sc.x, -file_min.y * sc.y, -center.z * sc.z)
+	pivot.add_child(mesh)
+
+func _module_house(pos: Vector3, size: Vector3, face: String, shell: String, roof: String, door: String, with_chimney: bool) -> void:
+	var root := "res://assets/psx-buildings/"
+	_drop_model(root + shell, pos, 0.0, size, Vector3(0, 0, -4), Vector3(4, 3, 0), 1.0, true)
+	_drop_model(root + roof, pos + Vector3(0, size.y, 0), 0.0, size, Vector3(0, -0.37, -4.38), Vector3(4, 2.19, 0.38), 1.0, false)
+	var door_pose: Array = _street_pose(pos, size, face, 0.12, 0.0, 0.0)
+	var door_node := _instance_building(root + door)
+	door_node.position = door_pose[0] as Vector3
+	door_node.rotation.y = float(door_pose[1])
+	add_child(door_node)
+	var win_pose: Array = _street_pose(pos, size, face, 0.14, 1.45, 1.65)
+	var win := _instance_building(root + "window_square.glb")
+	win.position = win_pose[0] as Vector3
+	win.rotation.y = float(win_pose[1])
+	add_child(win)
+	if with_chimney:
+		var stack := _instance_building(root + "chimney.glb")
+		stack.position = pos + Vector3(size.x * 0.22, size.y * 0.55, -size.z * 0.18)
+		stack.scale = Vector3(0.42, 0.42, 0.42)
+		add_child(stack)
+
+func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: String, kind: String = "") -> void:
+	_footprint(size, pos)
+	var front := 1.0 if face == "e" or face == "s" else -1.0
+	# Church door looks along file +Z. Tavern's long front looks along file -Z
+	# (the volume sits on +Z of that wall). Both end up yawed ±90° onto the street.
+	if kind == "chapel":
+		# File +Z is the apse end. The door and steps sit on file -Z, so that
+		# axis is the street front. Checked from the cobbles in 4.7.2.
+		var model_front := -1.0
+		var yaw := PI * 0.5 if front / model_front > 0.0 else -PI * 0.5
+		_drop_model("res://assets/psx-buildings/church.glb", pos, yaw, size, Vector3(-449.3, -1.5, -1060.7), Vector3(449.3, 1018.3, 372.2), 0.01, true)
+	elif kind == "inn":
+		# The tavern's long front (door and windows) looks along file +Z.
+		var model_front := 1.0
+		var yaw := PI * 0.5 if front / model_front > 0.0 else -PI * 0.5
+		_drop_model("res://assets/psx-buildings/tavern.glb", pos, yaw, size, Vector3(-819.8, 0.07, -28.1), Vector3(919.4, 482.2, 475.0), 0.01, true)
+	elif kind == "smith":
+		_module_house(pos, size, face, "shell_stone.glb", "roof_red.glb", "door_stone.glb", true)
+	elif kind == "hostel":
+		_module_house(pos, size, face, "shell_base.glb", "roof_red.glb", "door_wood.glb", true)
+	elif kind == "stables":
+		_module_house(pos, size, face, "shell_base.glb", "roof_straw.glb", "door_wood.glb", false)
+	elif kind == "shop":
+		var roof := "roof_blue.glb" if pos.z > 0.0 else "roof_red.glb"
+		_module_house(pos, size, face, "shell_plaster.glb", roof, "door_wood.glb", false)
+	else:
+		_module_house(pos, size, face, "shell_plaster.glb", "roof_straw.glb", "door_wood.glb", false)
 	var fx := pos.x
 	var fz := pos.z
 	if face == "e":
@@ -980,35 +1055,6 @@ func _house(pos: Vector3, size: Vector3, name: String, stone: bool, face: String
 		fz = pos.z + size.z * 0.5
 	else:
 		fz = pos.z - size.z * 0.5
-	if art != "":
-		var tex: Texture2D = load("res://assets/sprites/buildings/%s.png" % art) as Texture2D
-		if tex:
-			var tw := float(tex.get_width())
-			var th := float(tex.get_height())
-			var front_w := size.z if face == "e" or face == "w" else size.x
-			var fit_w := front_w * 0.96
-			var fit_h := size.y * 0.98
-			var scale := minf(fit_w / tw, fit_h / th)
-			var card_w := tw * scale
-			var card_h := th * scale
-			var outward := 0.05
-			var sx := fx
-			var sz := fz
-			var yaw := 0.0
-			if face == "e":
-				sx += outward
-				yaw = PI * 0.5
-			elif face == "w":
-				sx -= outward
-				yaw = -PI * 0.5
-			elif face == "s":
-				sz += outward
-			else:
-				sz -= outward
-				yaw = PI
-			# QuadMesh writes depth in the opaque pass. Sprite3D facades in the
-			# compatibility renderer still sort as transparent and draw behind the camera.
-			_wall_card(tex, Vector3(sx, card_h * 0.5, sz), yaw, card_w, card_h)
 	_sign(Vector3(fx, size.y + 0.28, fz), name)
 	_wall_lantern(Vector3(fx, 2.2, fz))
 	var glow := OmniLight3D.new()
@@ -1397,7 +1443,8 @@ func _anim_npcs(delta: float) -> void:
 				n["sitSpr"].visible = sitting
 			if n.get("walkSpr"):
 				n["walkSpr"].visible = not sitting
-		# Sprites and these meshes both face local +Z. atan2(x, z) aims that axis at the player.
+		# Rig +Z is the face: character meshes are turned 180° inside the rig, and
+		# sprites already face +Z. atan2(x, z) aims that axis at the player.
 		# look_at() would aim -Z and show every back.
 		var to_cam: Vector3 = player.global_position - n["node"].global_position
 		if to_cam.length_squared() > 0.0001:
