@@ -75,6 +75,10 @@ var menu_page := "root"
 var menu_box: Control
 var menu_col: VBoxContainer
 var fires: Array = []
+var _night_mats: Array = []
+var _pool_tex: Texture2D
+var _flame_tex: Texture2D
+var _sign_tex: Dictionary = {}
 var _lot_root: Node3D = null
 var _lots: Array = []
 var _road_pts: PackedVector2Array = PackedVector2Array()
@@ -127,7 +131,9 @@ func _build_world() -> void:
 	# Flat unshaded dirt under the whole town. A lit mud box went black at night,
 	# and mud.png itself is dark enough to read as a void wherever the grass
 	# tiles do not cover (yards, footprints, the ground past the last row).
-	_ground_patch(Vector3(0, 0.004, 0), Vector2(220, 220), _tile_mat("res://assets/psx-nature/dirt_grass.png", 28.0, Color(1.05, 0.98, 0.82)))
+	var dirt := _tile_mat("res://assets/psx-nature/dirt_grass.png", 28.0, Color(1.05, 0.98, 0.82))
+	_watch_night(dirt)
+	_ground_patch(Vector3(0, 0.004, 0), Vector2(220, 220), dirt)
 	var floor_body := StaticBody3D.new()
 	var floor_col := CollisionShape3D.new()
 	var floor_shape := BoxShape3D.new()
@@ -195,6 +201,8 @@ func _build_castle_gate() -> void:
 		body.position = Vector3(xoff * 21.2, 4, z)
 		body.add_child(col)
 		add_child(body)
+	var approach := _road_frame(_road_len - 3.4)
+	_sign(Vector3(float(approach["x"]), 2.62, float(approach["z"])), "HARTH\nKING'S GATE", float(approach["yaw"]), true, 0.0, 3.5)
 
 func _adopt(n: Node) -> void:
 	if _lot_root != null:
@@ -437,25 +445,31 @@ func _dress_road() -> void:
 	add_child(pivot)
 	_lot_root = pivot
 	_box(Vector3(2.2, 2.4, 2.4), Vector3(0.0, 1.2, 0.0), Color(0.55, 0.42, 0.30), null, true, 2.0)
-	_sign(Vector3(1.2, 2.45, 0.0), "ROAD TAX")
-	_lantern(Vector3(1.15, 1.85, 0.0))
+	_sign(Vector3(1.42, 2.15, 0.15), "ROAD TAX", PI * 0.5)
+	_wall_lantern(Vector3(1.36, 1.72, -0.72), PI * 0.5)
 	_lot_root = null
 	_booth = {
 		"pos": pivot.position,
 		"size": Vector3(2.2, 2.4, 2.4),
 		"yaw": float(toll["yaw"]),
 	}
-	_sign(Vector3(float(toll["x"]), 3.4, float(toll["z"])), "ROAD TAX", float(toll["yaw"]))
-	var d := 8.0
-	while d < _road_len - 5.0:
+	var d := 18.0
+	var lamp_side := 1.0
+	while d < _road_len - 14.0:
 		var frame := _road_frame(d)
-		for side in [-1.0, 1.0]:
-			_lantern(Vector3(
-				float(frame["x"]) + side * float(frame["rx"]) * 3.05,
-				2.55,
-				float(frame["z"]) + side * float(frame["rz"]) * 3.05
-			))
-		d += 9.0
+		var lamp_x: float = float(frame["x"]) + lamp_side * float(frame["rx"]) * 3.2
+		var lamp_z: float = float(frame["z"]) + lamp_side * float(frame["rz"]) * 3.2
+		if not _inside_lot(lamp_x, lamp_z, 0.35):
+			_lantern(Vector3(lamp_x, 2.45, lamp_z))
+		lamp_side = -lamp_side
+		d += 18.0
+	var last := _road_frame(_road_len - 8.0)
+	for gate_side_v in [-1.0, 1.0]:
+		var gate_side := float(gate_side_v)
+		var gate_x: float = float(last["x"]) + gate_side * float(last["rx"]) * 2.7
+		var gate_z: float = float(last["z"]) + gate_side * float(last["rz"]) * 2.7
+		if not _inside_lot(gate_x, gate_z, 0.3):
+			_lantern(Vector3(gate_x, 2.45, gate_z))
 	var approach := _road_frame(_road_len - 8.0)
 	for side_v in [-1.0, 1.0]:
 		var side := float(side_v)
@@ -547,6 +561,8 @@ func _forest_blocked(x: float, z: float, r := 0.0) -> bool:
 	return false
 
 func _plant_forest() -> void:
+	for mat in grass_mats:
+		_watch_night(mat)
 	_plant_grass_ground()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1337
@@ -622,6 +638,17 @@ func _tile_mat(path: String, repeat: float, tint: Color, repeat_y := -1.0) -> St
 	m.uv1_scale = Vector3(repeat, ry, 1)
 	return m
 
+func _watch_night(mat: StandardMaterial3D) -> void:
+	_night_mats.append({ "mat": mat, "day": mat.albedo_color })
+
+func _tint_ground() -> void:
+	# Unshaded ground ignores OmniLight. Night halves the albedo; lamp pools paint the light back.
+	var k := 1.0 if is_day else 0.5
+	for entry in _night_mats:
+		var mat: StandardMaterial3D = entry["mat"]
+		var day: Color = entry["day"]
+		mat.albedo_color = Color(day.r * k, day.g * k, day.b * k, day.a)
+
 func _ground_patch(pos: Vector3, size: Vector2, mat: Material, yaw := 0.0) -> void:
 	# PlaneMesh defaults to FACE_Y (already flat, normal +Y). A -90° X
 	# turn stands it up into a wall you walk through.
@@ -637,6 +664,7 @@ func _ground_patch(pos: Vector3, size: Vector2, mat: Material, yaw := 0.0) -> vo
 
 func _cobble_path() -> void:
 	var cobble := _tile_mat("res://assets/psx-nature/cobble.png", 3.4, Color(0.83, 0.8, 0.72), 18.0)
+	_watch_night(cobble)
 	var step := 2.15
 	var d := 5.0
 	while d < _road_len - 2.4:
@@ -658,6 +686,9 @@ func _plant_grass_ground() -> void:
 	var grass := _tile_mat("res://assets/psx-nature/grass_tile.png", 2.2, Color(0.77, 0.83, 0.64))
 	var moss := _tile_mat("res://assets/psx-nature/moss_tile.png", 2.0, Color(0.72, 0.78, 0.6))
 	var mix := _tile_mat("res://assets/psx-nature/dirt_grass.png", 2.4, Color(0.78, 0.72, 0.6))
+	_watch_night(grass)
+	_watch_night(moss)
+	_watch_night(mix)
 	var gx := -76.0
 	while gx <= 76.0:
 		var gz := -70.0
@@ -851,6 +882,8 @@ func _build_player() -> void:
 func _build_ditch() -> void:
 	var bank_mat := _tile_mat("res://assets/psx-nature/dirt_grass.png", 6.0, Color(0.78, 0.69, 0.56))
 	var mud_mat := _tile_mat("res://assets/mud.png", 3.0, Color(0.54, 0.42, 0.28))
+	_watch_night(bank_mat)
+	_watch_night(mud_mat)
 	var bank := CylinderMesh.new()
 	bank.top_radius = 7.4
 	bank.bottom_radius = 3.4
@@ -880,9 +913,15 @@ func _build_ditch() -> void:
 	for side in [-1.0, 1.0]:
 		_lantern(Vector3(
 			ditch_pos.x + side * float(mouth["rx"]) * 3.3,
-			2.2,
+			2.35,
 			ditch_pos.z + side * float(mouth["rz"]) * 3.3
 		))
+	var welcome := _road_frame(7.4)
+	_sign(Vector3(
+		float(welcome["x"]) - float(welcome["rx"]) * 2.55,
+		2.28,
+		float(welcome["z"]) - float(welcome["rz"]) * 2.55
+	), "WELCOME\nTO HARTH", float(welcome["yaw"]), true, 0.32)
 
 	var nix_at := _road_frame(5.4)
 	fairy = Node3D.new()
@@ -920,6 +959,7 @@ func _build_ditch() -> void:
 		0.08,
 		float(gifts_at["z"]) + float(gifts_at["rz"]) * 1.6
 	), "E — take the spellbook. Blast the party.")
+	_tint_ground()
 	_build_npcs()
 
 func _tag(node: Node3D, text: String, y: float) -> void:
@@ -1287,79 +1327,408 @@ func _unlit_box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	mi.material_override = mat
 	mi.position = pos
 	_adopt(mi)
 	return mi
 
+func _flame_texture() -> Texture2D:
+	if _flame_tex != null:
+		return _flame_tex
+	var w := 8
+	var h := 16
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		var t := float(y) / float(h - 1)
+		var hot := 1.0 - t * 0.45
+		for x in w:
+			var edge := absf((float(x) + 0.5) / float(w) - 0.5) * 2.0
+			var body := clampf(1.0 - edge, 0.0, 1.0) * (1.0 - t)
+			body = body * body
+			img.set_pixel(x, y, Color(hot, hot * 0.5, hot * 0.12, body))
+	_flame_tex = ImageTexture.create_from_image(img)
+	return _flame_tex
+
+func _flame_cards(pos: Vector3, height: float) -> void:
+	var tex := _flame_texture()
+	for i in 2:
+		var q := QuadMesh.new()
+		q.size = Vector2(height * 0.72, height)
+		var mi := MeshInstance3D.new()
+		mi.mesh = q
+		mi.position = pos
+		mi.rotation.y = float(i) * PI * 0.5
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.albedo_texture = tex
+		mat.albedo_color = Color(1, 1, 1, 1)
+		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		mi.material_override = mat
+		_adopt(mi)
+
 func _torch(pos: Vector3, color: Color, energy: float) -> void:
-	_unlit_box(Vector3(0.09, 0.2, 0.09), pos, Color(1.0, 0.58, 0.22))
+	_unlit_box(Vector3(0.18, 0.05, 0.18), pos + Vector3(0, -0.1, 0), Color(0.14, 0.12, 0.1))
+	var flame_h := 0.34 if energy >= 3.0 else 0.22
+	_flame_cards(pos + Vector3(0, flame_h * 0.35, 0), flame_h)
 	var light := OmniLight3D.new()
 	light.light_color = color
 	light.light_energy = energy
-	light.omni_range = 11.0
+	light.omni_range = 9.0
+	light.shadow_enabled = false
 	light.position = pos
 	_adopt(light)
 	fires.append({ "light": light, "base": energy, "seed": pos.x + pos.z })
 
+func _pool_texture() -> Texture2D:
+	if _pool_tex != null:
+		return _pool_tex
+	var n := 48
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var mid := (float(n) - 1.0) * 0.5
+	var steps := 5
+	for y in n:
+		for x in n:
+			var dx := (float(x) - mid) / mid
+			var dy := (float(y) - mid) / mid
+			var d := sqrt(dx * dx + dy * dy)
+			var band := 0.0
+			if d <= 1.0:
+				var q := int(d * float(steps))
+				band = 1.0 - float(q) / float(steps)
+			img.set_pixel(x, y, Color(1, 1, 1, band))
+	_pool_tex = ImageTexture.create_from_image(img)
+	return _pool_tex
+
+func _lamp_pool(pos: Vector3, size: float) -> StandardMaterial3D:
+	var mesh := PlaneMesh.new()
+	mesh.orientation = PlaneMesh.FACE_Y
+	mesh.size = Vector2(size, size)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_texture = _pool_texture()
+	var a := 0.07 if is_day else 0.9
+	mat.albedo_color = Color(1.0, 0.56, 0.2, a)
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.disable_receive_shadows = true
+	mi.material_override = mat
+	_adopt(mi)
+	return mat
+
+func _lantern_cage() -> StandardMaterial3D:
+	var glass := _unlit_box(Vector3(0.11, 0.15, 0.11), Vector3(0, -0.02, 0), Color(1.0, 0.78, 0.42))
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = Color(1.0, 0.78, 0.42)
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.emission_enabled = true
+	glow.emission = Color(1.0, 0.58, 0.18)
+	glow.emission_energy_multiplier = 2.1
+	glow.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	glass.material_override = glow
+	var iron := Color(0.14, 0.12, 0.11)
+	var bars: Array[float] = [-0.1, 0.1]
+	for x in bars:
+		for z in bars:
+			_unlit_box(Vector3(0.02, 0.28, 0.02), Vector3(x, 0.0, z), iron)
+	_unlit_box(Vector3(0.24, 0.025, 0.24), Vector3(0, 0.14, 0), iron)
+	_unlit_box(Vector3(0.24, 0.025, 0.24), Vector3(0, -0.14, 0), iron)
+	_unlit_box(Vector3(0.16, 0.04, 0.16), Vector3(0, 0.18, 0), iron)
+	_unlit_box(Vector3(0.07, 0.05, 0.07), Vector3(0, 0.22, 0), iron)
+	return glow
+
+func _hang_lamp(energy: float, pool_at: Vector3, pool_size: float) -> void:
+	var glow := _lantern_cage()
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.73, 0.4)
+	light.light_energy = energy * (0.2 if is_day else 1.0)
+	light.omni_range = 7.5
+	light.shadow_enabled = false
+	_adopt(light)
+	var pool := _lamp_pool(pool_at, pool_size)
+	var seed_at := Vector3.ZERO
+	if _lot_root != null:
+		seed_at = _lot_root.global_position
+	fires.append({
+		"light": light,
+		"base": energy,
+		"seed": seed_at.x + seed_at.z * 1.7,
+		"lamp": true,
+		"pool": pool,
+		"pool_a": 0.9,
+		"glow": glow,
+		"glow_base": 2.1,
+	})
+
 func _lantern(pos: Vector3) -> void:
-	var h := pos.y
-	_unlit_box(Vector3(0.11, h, 0.11), Vector3(pos.x, h * 0.5, pos.z), Color(0.54, 0.35, 0.2))
-	_unlit_box(Vector3(0.34, 0.07, 0.34), Vector3(pos.x, h + 0.3, pos.z), Color(0.35, 0.23, 0.14))
-	_unlit_box(Vector3(0.22, 0.04, 0.22), Vector3(pos.x, h + 0.02, pos.z), Color(0.29, 0.2, 0.12))
-	var glass := _unlit_box(Vector3(0.2, 0.24, 0.2), Vector3(pos.x, h + 0.16, pos.z), Color(1.0, 0.82, 0.56))
-	var glow := StandardMaterial3D.new()
-	glow.albedo_color = Color(1.0, 0.84, 0.55)
-	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.emission_enabled = true
-	glow.emission = Color(1.0, 0.72, 0.32)
-	glow.emission_energy_multiplier = 2.4
-	glass.material_override = glow
-	_torch(pos + Vector3(0, 0.16, 0), Color(1.0, 0.78, 0.42), 2.8)
+	var pivot := Node3D.new()
+	pivot.position = pos
+	_adopt(pivot)
+	var saved := _lot_root
+	_lot_root = pivot
+	var ground_y := -pos.y
+	var post_top := -0.16
+	var post_h := post_top - ground_y
+	_unlit_box(Vector3(0.28, 0.06, 0.28), Vector3(0, ground_y + 0.03, 0), Color(0.2, 0.14, 0.09))
+	_unlit_box(Vector3(0.11, post_h, 0.11), Vector3(0, ground_y + post_h * 0.5, 0), Color(0.32, 0.2, 0.11))
+	_hang_lamp(1.8, Vector3(0, 0.05 - pos.y, 0), 5.4)
+	_lot_root = saved
 
-func _wall_lantern(pos: Vector3) -> void:
-	_unlit_box(Vector3(0.28, 0.06, 0.28), pos + Vector3(0, 0.16, 0), Color(0.35, 0.23, 0.14))
-	var glass := _unlit_box(Vector3(0.16, 0.18, 0.16), pos, Color(1.0, 0.82, 0.56))
-	var glow := StandardMaterial3D.new()
-	glow.albedo_color = Color(1.0, 0.84, 0.55)
-	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	glow.emission_enabled = true
-	glow.emission = Color(1.0, 0.72, 0.32)
-	glow.emission_energy_multiplier = 2.4
-	glass.material_override = glow
-	_torch(pos, Color(1.0, 0.78, 0.42), 2.2)
-
-func _firepit(pos: Vector3, big: bool) -> void:
-	var s := 1.15 if big else 0.85
-	_box(Vector3(1.1 * s, 0.18, 1.1 * s), pos + Vector3(0, 0.1, 0), Color(0.16, 0.12, 0.08), null, true, 1.0)
-	var flame := OmniLight3D.new()
-	flame.light_color = Color(1.0, 0.52, 0.18)
-	flame.light_energy = 3.2 if big else 2.3
-	flame.omni_range = 12.0
-	flame.position = pos + Vector3(0, 1.0, 0)
-	add_child(flame)
-	fires.append({ "light": flame, "base": flame.light_energy, "seed": pos.x * 3.0 })
-
-func _sign(pos: Vector3, text: String, yaw := 0.0) -> void:
+func _wall_lantern(pos: Vector3, yaw: float = 0.0) -> void:
 	var pivot := Node3D.new()
 	pivot.position = pos
 	pivot.rotation.y = yaw
 	_adopt(pivot)
 	var saved := _lot_root
 	_lot_root = pivot
-	_box(Vector3(1.7, 0.64, 0.08), Vector3.ZERO, Color(0.22, 0.14, 0.08), null, false, 1.0)
-	var lab := Label3D.new()
-	lab.text = text
-	lab.font_size = 42
-	lab.pixel_size = 0.012
-	lab.modulate = Color(0.91, 0.84, 0.72)
-	lab.outline_size = 6
-	lab.outline_modulate = Color(0.05, 0.03, 0.02)
-	lab.position = Vector3(0, 0, 0.08)
-	_adopt(lab)
+	var iron := Color(0.14, 0.12, 0.11)
+	_unlit_box(Vector3(0.035, 0.035, 0.36), Vector3(0, 0.2, -0.14), iron)
+	_unlit_box(Vector3(0.025, 0.12, 0.025), Vector3(0, 0.12, 0), iron)
+	_hang_lamp(1.45, Vector3(0, 0.05 - pos.y, 0.7), 4.2)
+	_lot_root = saved
+
+func _firepit(pos: Vector3, big: bool) -> void:
+	var s := 1.15 if big else 0.85
+	_box(Vector3(1.1 * s, 0.18, 1.1 * s), pos + Vector3(0, 0.1, 0), Color(0.16, 0.12, 0.08), null, true, 1.0)
+	_flame_cards(pos + Vector3(0, 0.28, 0), 0.42 if big else 0.3)
+	var flame := OmniLight3D.new()
+	flame.light_color = Color(1.0, 0.52, 0.18)
+	flame.light_energy = 3.2 if big else 2.3
+	flame.omni_range = 10.0
+	flame.shadow_enabled = false
+	flame.position = pos + Vector3(0, 0.8, 0)
+	add_child(flame)
+	fires.append({ "light": flame, "base": flame.light_energy, "seed": pos.x * 3.0 })
+
+const _SIGN_FONT := {
+	"A": [0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+	"B": [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
+	"C": [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
+	"D": [0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E],
+	"E": [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
+	"F": [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
+	"G": [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E],
+	"H": [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+	"I": [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
+	"J": [0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0C],
+	"K": [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
+	"L": [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
+	"M": [0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11],
+	"N": [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
+	"O": [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+	"P": [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
+	"Q": [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
+	"R": [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
+	"S": [0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E],
+	"T": [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
+	"U": [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+	"V": [0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04],
+	"W": [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A],
+	"X": [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
+	"Y": [0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04],
+	"Z": [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
+	"0": [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
+	"1": [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
+	"2": [0x0E, 0x11, 0x01, 0x06, 0x08, 0x10, 0x1F],
+	"3": [0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E],
+	"4": [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
+	"5": [0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
+	"6": [0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E],
+	"7": [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+	"8": [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
+	"9": [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E],
+	"-": [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+	"'": [0x06, 0x06, 0x02, 0x04, 0x00, 0x00, 0x00],
+	".": [0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06],
+}
+
+func _glyph_cols(ch: String) -> int:
+	if ch == " ":
+		return 2
+	if ch == "'" or ch == ".":
+		return 3
+	return 5
+
+func _sign_lines(text: String) -> PackedStringArray:
+	var raw := text.to_upper()
+	var out := PackedStringArray()
+	if raw.contains("\n"):
+		for part in raw.split("\n", false):
+			var line := str(part).strip_edges()
+			if line != "":
+				out.append(line)
+		if out.is_empty():
+			out.append("?")
+		return out
+	if raw.length() <= 12:
+		out.append(raw)
+		return out
+	var cut := raw.rfind(" ")
+	if cut <= 0:
+		out.append(raw)
+		return out
+	out.append(raw.substr(0, cut).strip_edges())
+	out.append(raw.substr(cut + 1).strip_edges())
+	return out
+
+func _line_px(line: String, scale: int) -> int:
+	var w := 0
+	for i in line.length():
+		w += _glyph_cols(line.substr(i, 1)) * scale
+		if i < line.length() - 1:
+			w += scale
+	return w
+
+func _paint_px(img: Image, x: int, y: int, color: Color) -> void:
+	if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
+		return
+	img.set_pixel(x, y, color)
+
+func _paint_sign(text: String) -> Texture2D:
+	if _sign_tex.has(text):
+		return _sign_tex[text] as Texture2D
+	var lines := _sign_lines(text)
+	var scale := 2
+	var gap := 3 * scale
+	var row_h := 7 * scale
+	var text_w := 0
+	for line in lines:
+		text_w = maxi(text_w, _line_px(line, scale))
+	var text_h := lines.size() * row_h + (lines.size() - 1) * gap
+	var pad := 4 * scale
+	var w := text_w + pad * 2 + scale
+	var h := text_h + pad * 2 + scale
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(hash(text))
+	for py in h:
+		for px in w:
+			var n := rng.randf_range(-0.02, 0.02)
+			var grain := 0.035 if int(py / scale) % 4 == 0 else 0.0
+			var wood := Color(0.22 + n + grain, 0.13 + n * 0.5, 0.06, 1)
+			if px < 2 or py < 2 or px >= w - 2 or py >= h - 2:
+				wood = Color(0.07, 0.04, 0.03, 1)
+			img.set_pixel(px, py, wood)
+	var ink := Color(0.9, 0.81, 0.62, 1)
+	var soot := Color(0.04, 0.025, 0.015, 1)
+	var y0 := pad
+	for line in lines:
+		var x0 := pad + int((text_w - _line_px(line, scale)) / 2.0)
+		var cursor := x0
+		for i in line.length():
+			var ch := line.substr(i, 1)
+			var cols := _glyph_cols(ch)
+			if ch != " " and _SIGN_FONT.has(ch):
+				var rows: Array = _SIGN_FONT[ch]
+				for row in rows.size():
+					var bits := int(rows[row])
+					for bit in cols:
+						var on: int = (bits >> (cols - 1 - bit)) & 1
+						if on == 0:
+							continue
+						for sy in scale:
+							for sx in scale:
+								var gx := cursor + bit * scale + sx
+								var gy := y0 + row * scale + sy
+								_paint_px(img, gx + scale, gy + scale, soot)
+								_paint_px(img, gx, gy, ink)
+			elif ch != " ":
+				push_error("Sign has no glyph for %s" % ch)
+			cursor += cols * scale + scale
+		y0 += row_h + gap
+	var tex := ImageTexture.create_from_image(img)
+	_sign_tex[text] = tex
+	return tex
+
+func _sign_pole(x: float, ground_y: float, top_y: float) -> void:
+	var h := top_y - ground_y
+	var at := Vector3(x, ground_y + h * 0.5, -0.04)
+	_unlit_box(Vector3(0.12, h, 0.12), at, Color(0.28, 0.17, 0.1))
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = Vector3(0.14, h, 0.14)
+	col.shape = sh
+	body.position = at
+	body.add_child(col)
+	_adopt(body)
+
+func _sign(pos: Vector3, text: String, yaw: float = 0.0, post: bool = false, tilt: float = 0.0, span: float = 0.0) -> void:
+	var tex := _paint_sign(text)
+	var img_size := tex.get_size()
+	var ppm := 0.012
+	var board_w := float(img_size.x) * ppm
+	var board_h := float(img_size.y) * ppm
+	var pivot := Node3D.new()
+	pivot.position = pos
+	pivot.rotation.y = yaw
+	_adopt(pivot)
+	var saved := _lot_root
+	_lot_root = pivot
+	var hang := board_h * 0.5
+	var beam_y := hang + 0.16
+	var iron := Color(0.15, 0.13, 0.12)
+	var rope := Color(0.34, 0.26, 0.15)
+	if post:
+		var ground_y := -pos.y
+		if span > 0.2:
+			_sign_pole(-span * 0.5, ground_y, beam_y)
+			_sign_pole(span * 0.5, ground_y, beam_y)
+			_unlit_box(Vector3(span, 0.08, 0.08), Vector3(0, beam_y, -0.02), iron)
+		else:
+			_sign_pole(0.0, ground_y, beam_y)
+			_unlit_box(Vector3(0.05, 0.05, 0.22), Vector3(0, beam_y, 0.04), iron)
+	else:
+		_unlit_box(Vector3(0.045, 0.045, 0.7), Vector3(0, beam_y, -0.3), iron)
+	var chain_x: Array[float] = [-board_w * 0.28, board_w * 0.28]
+	for cx in chain_x:
+		_unlit_box(Vector3(0.02, 0.14, 0.02), Vector3(cx, hang + 0.05, 0), rope)
+	var hinge := Node3D.new()
+	hinge.position = Vector3(0, hang, 0)
+	hinge.rotation.z = tilt
+	_adopt(hinge)
+	_lot_root = hinge
+	_unlit_box(Vector3(board_w + 0.04, board_h + 0.04, 0.05), Vector3(0, -hang, -0.015), Color(0.16, 0.09, 0.05))
+	var quad := QuadMesh.new()
+	quad.size = Vector2(board_w, board_h)
+	var face := MeshInstance3D.new()
+	face.mesh = quad
+	face.position = Vector3(0, -hang, 0.02)
+	face.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_texture = tex
+	mat.albedo_color = Color(1, 1, 1, 1)
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.cull_mode = BaseMaterial3D.CULL_BACK
+	face.material_override = mat
+	_adopt(face)
+	var back := face.duplicate() as MeshInstance3D
+	back.rotation.y = PI
+	back.position = Vector3(0, -hang, -0.05)
+	var back_mat := mat.duplicate() as StandardMaterial3D
+	back_mat.uv1_scale = Vector3(-1, 1, 1)
+	back_mat.uv1_offset = Vector3(1, 0, 0)
+	back.material_override = back_mat
+	_adopt(back)
 	_lot_root = saved
 
 func _footprint(size: Vector3, pos: Vector3) -> void:
@@ -1456,8 +1825,8 @@ func _open_workshop(face: String, lot_name: String) -> Dictionary:
 	var saved := _lot_root
 	_lot_root = model
 	_torch(Vector3(-0.54, 0.58, 2.55), Color(1.0, 0.42, 0.12), 3.4)
-	_sign(Vector3(-1.55, 1.28, 3.35), lot_name)
-	_wall_lantern(Vector3(-2.4, 1.55, 3.2))
+	_sign(Vector3(-1.55, 1.08, 3.42), lot_name)
+	_wall_lantern(Vector3(-2.35, 1.48, 3.15))
 	_lot_root = saved
 	var marta_model := Vector3(-0.562, 0.0, 1.661)
 	var anvil_model := Vector3(0.036, 0.42, 1.672)
@@ -1552,14 +1921,31 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 	else:
 		fz = at.z - size.z * 0.5
 	if kind != "smith":
-		_sign(Vector3(fx, size.y + 0.28, fz), name)
-		_wall_lantern(Vector3(fx, 2.2, fz))
-		var glow := OmniLight3D.new()
-		glow.light_color = Color(1.0, 0.72, 0.38)
-		glow.light_energy = 1.1
-		glow.omni_range = 6.0
-		glow.position = Vector3(fx, 1.7, fz)
-		_adopt(glow)
+		var along_sign := -1.45
+		var along_lamp := 0.85
+		var out := 0.55
+		var lamp_out := 0.36
+		var sign_yaw := 0.0
+		var sign_at := Vector3.ZERO
+		var lamp_at := Vector3.ZERO
+		if face == "e":
+			sign_yaw = PI * 0.5
+			sign_at = Vector3(fx + out, 2.4, along_sign)
+			lamp_at = Vector3(fx + lamp_out, 2.05, along_lamp)
+		elif face == "w":
+			sign_yaw = -PI * 0.5
+			sign_at = Vector3(fx - out, 2.4, along_sign)
+			lamp_at = Vector3(fx - lamp_out, 2.05, along_lamp)
+		elif face == "s":
+			sign_yaw = 0.0
+			sign_at = Vector3(along_sign, 2.4, fz + out)
+			lamp_at = Vector3(along_lamp, 2.05, fz + lamp_out)
+		else:
+			sign_yaw = PI
+			sign_at = Vector3(along_sign, 2.4, fz - out)
+			lamp_at = Vector3(along_lamp, 2.05, fz - lamp_out)
+		_sign(sign_at, name, sign_yaw)
+		_wall_lantern(lamp_at, sign_yaw)
 	_lot_root = null
 	var lot := {
 		"pos": pos,
@@ -1622,6 +2008,7 @@ func _apply_time() -> void:
 		sun.light_color = Color(0.45, 0.5, 0.58)
 		sun.light_energy = 0.16
 		sun.rotation_degrees = Vector3(-50, 40, 0)
+	_tint_ground()
 
 func _build_clouds() -> void:
 	for i in 7:
@@ -1902,7 +2289,21 @@ func _physics_process(delta: float) -> void:
 	_refresh_hud()
 	for f in fires:
 		var flick: float = 0.82 + sin(fairy_t * 7.0 + float(f["seed"])) * 0.14
-		f["light"].light_energy = float(f["base"]) * flick
+		var scale := 1.0
+		if bool(f.get("lamp", false)) and is_day:
+			scale = 0.2
+		f["light"].light_energy = float(f["base"]) * flick * scale
+		if f.get("pool") != null:
+			var pool_mat: StandardMaterial3D = f["pool"]
+			var a := float(f["pool_a"]) * flick
+			if bool(f.get("lamp", false)) and is_day:
+				a *= 0.08
+			var tint := pool_mat.albedo_color
+			tint.a = a
+			pool_mat.albedo_color = tint
+		if f.get("glow") != null:
+			var glow_mat: StandardMaterial3D = f["glow"]
+			glow_mat.emission_energy_multiplier = float(f["glow_base"]) * flick
 
 func _pose_sword(u: float) -> void:
 	if sword_view == null:

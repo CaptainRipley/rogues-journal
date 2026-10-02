@@ -10,7 +10,7 @@ BlendSwap 75729, also on OpenGameArt: https://opengameart.org/content/medieval-b
 
 The BlendSwap license in the zip is Creative Commons Zero. Textures are packed in that blend (brick, iron, wood, roof tiles, lava in the forge, and the rest). They are resized to 512 px on the long side so they sit with the town's nearest-filter PSX look.
 
-`workshop.glb` is that building, floor included, with the open forge bay facing the street. The anvil, forge, bellows, grindstone, barrels, workbench, tool rack, and chimney are the meshes that shipped in the blend.
+`workshop.glb` is that building, floor included, with the open forge bay facing the street. The anvil, forge, bellows, grindstone, barrels, workbench, tool rack, and chimney are the meshes that shipped in the blend. The board under the lean-to is painted in the scene, same low-res lettering as the other lots, and is not a texture from this blend.
 
 `strike_hammer.glb` is the hammer from the same author's CC0 Medieval Smith Pack (https://opengameart.org/content/medieval-smith-pack), with the wrought-iron and wood textures taken from the blacksmith blend above. Marta swings it on a loop while she stands at the anvil.
 
