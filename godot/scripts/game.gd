@@ -102,11 +102,14 @@ func _build_world() -> void:
 	_build_clouds()
 	_build_backdrop()
 
-	_box(Vector3(160, 1, 160), Vector3(0, -0.5, 0), Color(0.72, 0.66, 0.52), mud_tex, true, 24.0)
+	# Flat unshaded dirt under the whole town. A lit mud box went black at night,
+	# and mud.png itself is dark enough to read as a void wherever the grass
+	# tiles do not cover (yards, footprints, the ground past the last row).
+	_ground_patch(Vector3(0, 0.004, 0), Vector2(220, 220), _tile_mat("res://assets/psx-nature/dirt_grass.png", 28.0, Color(1.05, 0.98, 0.82)))
 	var floor_body := StaticBody3D.new()
 	var floor_col := CollisionShape3D.new()
 	var floor_shape := BoxShape3D.new()
-	floor_shape.size = Vector3(200, 2, 200)
+	floor_shape.size = Vector3(220, 2, 220)
 	floor_col.shape = floor_shape
 	floor_body.position.y = -1
 	floor_body.add_child(floor_col)
@@ -122,7 +125,7 @@ func _build_world() -> void:
 	_house(Vector3(9.6, 0, 6.2), Vector3(8.4, 6.2, 8.4), "THE GENEROUS CUP", false, "w", "inn")
 	_house(Vector3(9.4, 0, -3.4), Vector3(8.0, 4.3, 7.4), "THE KING'S NAGS", false, "w", "stables")
 	_house(Vector3(8.8, 0, -12.0), Vector3(6.6, 3.9, 5.4), "TALLOW", false, "w", "shop")
-	_box(Vector3(2.6, 2.4, 2.2), Vector3(-3.6, 1.2, 4.2), Color(0.29, 0.23, 0.17), null, true, 2.0)
+	_box(Vector3(2.6, 2.4, 2.2), Vector3(-3.6, 1.2, 4.2), Color(0.55, 0.42, 0.30), null, true, 2.0)
 	_sign(Vector3(-2.3, 2.35, 4.2), "ROAD TAX")
 	_lantern(Vector3(-2.25, 1.85, 4.2))
 	_lantern(Vector3(-2.35, 2.55, 22.2))
@@ -306,12 +309,14 @@ func _tile_mat(path: String, repeat: float, tint: Color, repeat_y := -1.0) -> St
 	return m
 
 func _ground_patch(pos: Vector3, size: Vector2, mat: Material) -> void:
+	# PlaneMesh defaults to FACE_Y (already flat, normal +Y). A -90° X
+	# turn stands it up into a wall you walk through.
 	var plane := PlaneMesh.new()
+	plane.orientation = PlaneMesh.FACE_Y
 	plane.size = size
 	var mi := MeshInstance3D.new()
 	mi.mesh = plane
 	mi.material_override = mat
-	mi.rotation.x = -PI / 2.0
 	mi.position = pos
 	add_child(mi)
 
@@ -340,11 +345,11 @@ func _plant_grass_ground() -> void:
 			if not skip:
 				var mat := moss if int(gx * 13.0 + gz * 7.0) % 5 == 0 else grass
 				var plane := PlaneMesh.new()
+				plane.orientation = PlaneMesh.FACE_Y
 				plane.size = Vector2(9.4, 9.4)
 				var mi := MeshInstance3D.new()
 				mi.mesh = plane
 				mi.material_override = mat
-				mi.rotation.x = -PI / 2.0
 				mi.position = Vector3(gx, 0.014, gz)
 				add_child(mi)
 			gz += 8.0
@@ -358,11 +363,11 @@ func _plant_grass_ground() -> void:
 	for lot in [-9.2, 9.2]:
 		for z in [21.5, 14.2, 6.4, -2.2, -11.6]:
 			var plane := PlaneMesh.new()
+			plane.orientation = PlaneMesh.FACE_Y
 			plane.size = Vector2(4.8, 6.2)
 			var mi := MeshInstance3D.new()
 			mi.mesh = plane
 			mi.material_override = grass
-			mi.rotation.x = -PI / 2.0
 			mi.position = Vector3(lot * 0.52, 0.015, z)
 			add_child(mi)
 
@@ -838,7 +843,10 @@ func _box(size: Vector3, pos: Vector3, color: Color, tex: Texture2D, solid: bool
 	mat.metallic = 0.0
 	mat.metallic_specular = 0.0
 	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
+	mat.cull_mode = BaseMaterial3D.CULL_BACK
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	if tex:
 		mat.albedo_texture = tex
@@ -928,10 +936,40 @@ func _sign(pos: Vector3, text: String) -> void:
 	lab.position = pos + Vector3(0, 0, 0.08)
 	add_child(lab)
 
+func _wall_card(tex: Texture2D, pos: Vector3, yaw: float, width: float, height: float) -> void:
+	var mesh := QuadMesh.new()
+	mesh.orientation = PlaneMesh.FACE_Z
+	mesh.size = Vector2(width, height)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = pos
+	mi.rotation.y = yaw
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.cull_mode = BaseMaterial3D.CULL_BACK
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_OPAQUE_ONLY
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+	var img: Image = tex.get_image()
+	if img != null and img.detect_alpha() != Image.ALPHA_NONE:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		mat.alpha_scissor_threshold = 0.5
+		mat.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
+	mi.material_override = mat
+	add_child(mi)
+
 func _house(pos: Vector3, size: Vector3, name: String, stone: bool, face: String, art: String = "") -> void:
-	_box(size, pos + Vector3(0, size.y * 0.5, 0), Color(0.35, 0.22, 0.16), stone_tex if stone else null, true, 2.0)
-	_box(Vector3(size.x + 0.9, 0.22, size.z + 0.7), pos + Vector3(0, size.y + 0.08, 0), Color(0.22, 0.12, 0.08), null, true, 1.0)
-	_box(Vector3(0.55, 1.15, 0.55), pos + Vector3(size.x * 0.28, size.y + 0.7, -size.z * 0.22), Color(0.22, 0.16, 0.12), null, true, 1.0)
+	# The painted card only covers the street face. Sides and backs are this box.
+	# stone.png is already dark; multiplying a brown tint crushed those faces to
+	# black in the unshaded pass, which reads as missing ground behind the row.
+	var wall_tex: Texture2D = stone_tex if stone else null
+	var wall_color := Color(2.4, 2.15, 1.9) if stone else Color(0.74, 0.54, 0.38)
+	_box(size, pos + Vector3(0, size.y * 0.5, 0), wall_color, wall_tex, true, 2.0)
+	_box(Vector3(size.x + 0.9, 0.22, size.z + 0.7), pos + Vector3(0, size.y + 0.08, 0), Color(0.58, 0.30, 0.18), null, true, 1.0)
+	_box(Vector3(0.55, 1.15, 0.55), pos + Vector3(size.x * 0.28, size.y + 0.7, -size.z * 0.22), Color(0.52, 0.40, 0.32), stone_tex, true, 1.0)
 	var fx := pos.x
 	var fz := pos.z
 	if face == "e":
@@ -943,50 +981,34 @@ func _house(pos: Vector3, size: Vector3, name: String, stone: bool, face: String
 	else:
 		fz = pos.z - size.z * 0.5
 	if art != "":
-		var s := Sprite3D.new()
 		var tex: Texture2D = load("res://assets/sprites/buildings/%s.png" % art) as Texture2D
-		s.texture = tex
-		s.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-		s.shaded = false
-		# Opaque cards were alpha-blended, so the whole wall sorted wrong and
-		# drew behind the camera. Discard writes depth. Near-white margins
-		# (cottage, shop) are already keyed out of the PNG.
-		s.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
-		s.alpha_scissor_threshold = 0.5
-		s.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
-		s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var tw := 128.0
-		var th := 128.0
 		if tex:
-			tw = float(tex.get_width())
-			th = float(tex.get_height())
-		var front_w := size.z if face == "e" or face == "w" else size.x
-		var fit_w := front_w * 0.96
-		var fit_h := size.y * 0.98
-		s.pixel_size = minf(fit_w / tw, fit_h / th)
-		var spr_h := th * s.pixel_size
-		var outward := 0.06
-		var sx := fx
-		var sz := fz
-		if face == "e":
-			sx += outward
-		elif face == "w":
-			sx -= outward
-		elif face == "s":
-			sz += outward
-		else:
-			sz -= outward
-		# Bottom on the ground, centered on the face. The old 128px assumption
-		# pushed these cards through the floor and into the street.
-		s.position = Vector3(sx, spr_h * 0.5, sz)
-		if face == "e":
-			s.rotation.y = PI * 0.5
-		elif face == "w":
-			s.rotation.y = -PI * 0.5
-		elif face == "n":
-			s.rotation.y = PI
-		add_child(s)
+			var tw := float(tex.get_width())
+			var th := float(tex.get_height())
+			var front_w := size.z if face == "e" or face == "w" else size.x
+			var fit_w := front_w * 0.96
+			var fit_h := size.y * 0.98
+			var scale := minf(fit_w / tw, fit_h / th)
+			var card_w := tw * scale
+			var card_h := th * scale
+			var outward := 0.05
+			var sx := fx
+			var sz := fz
+			var yaw := 0.0
+			if face == "e":
+				sx += outward
+				yaw = PI * 0.5
+			elif face == "w":
+				sx -= outward
+				yaw = -PI * 0.5
+			elif face == "s":
+				sz += outward
+			else:
+				sz -= outward
+				yaw = PI
+			# QuadMesh writes depth in the opaque pass. Sprite3D facades in the
+			# compatibility renderer still sort as transparent and draw behind the camera.
+			_wall_card(tex, Vector3(sx, card_h * 0.5, sz), yaw, card_w, card_h)
 	_sign(Vector3(fx, size.y + 0.28, fz), name)
 	_wall_lantern(Vector3(fx, 2.2, fz))
 	var glow := OmniLight3D.new()
@@ -1375,8 +1397,11 @@ func _anim_npcs(delta: float) -> void:
 				n["sitSpr"].visible = sitting
 			if n.get("walkSpr"):
 				n["walkSpr"].visible = not sitting
+		# Sprites and these meshes both face local +Z. atan2(x, z) aims that axis at the player.
+		# look_at() would aim -Z and show every back.
 		var to_cam: Vector3 = player.global_position - n["node"].global_position
-		n["node"].rotation.y = atan2(to_cam.x, to_cam.z)
+		if to_cam.length_squared() > 0.0001:
+			n["node"].rotation.y = atan2(to_cam.x, to_cam.z)
 		var t := fairy_t * (9.0 if moving else 2.4) + home.x
 		if n.get("body"):
 			var body: Node3D = n["body"]
