@@ -6,7 +6,22 @@ enum PathId { NONE, STEEL, SONG, SPARK, FEATHER }
 const SPEED := 8.8
 const JUMP_V := 7.4
 const GRAVITY := 18.0
-const DITCH := Vector3(0.0, 0.0, 28.8)
+# Crest, west bend, then back to the gate. Flat at both ends so you leave
+# the ditch and arrive at the door heading north, without a straight sightline.
+const ROAD_KNOTS: Array[Vector2] = [
+	Vector2(16.0, 58.0),
+	Vector2(16.0, 50.0),
+	Vector2(12.0, 42.0),
+	Vector2(5.0, 34.0),
+	Vector2(-3.0, 26.0),
+	Vector2(-10.0, 18.0),
+	Vector2(-14.0, 10.0),
+	Vector2(-14.0, 2.0),
+	Vector2(-10.0, -6.0),
+	Vector2(-4.0, -12.0),
+	Vector2(0.0, -17.0),
+	Vector2(0.0, -21.2),
+]
 
 var phase: Phase = Phase.TITLE
 var path: PathId = PathId.NONE
@@ -60,6 +75,13 @@ var menu_page := "root"
 var menu_box: Control
 var menu_col: VBoxContainer
 var fires: Array = []
+var _lot_root: Node3D = null
+var _lots: Array = []
+var _road_pts: PackedVector2Array = PackedVector2Array()
+var _road_dst: PackedFloat32Array = PackedFloat32Array()
+var _road_len := 0.0
+var ditch_pos := Vector3.ZERO
+var _booth: Dictionary = {}
 
 func _ready() -> void:
 	DisplayServer.window_set_title("RJ-READY")
@@ -114,36 +136,10 @@ func _build_world() -> void:
 	floor_body.position.y = -1
 	floor_body.add_child(floor_col)
 	add_child(floor_body)
+	_trace_road()
 	_cobble_path()
-	_house(Vector3(-9.2, 0, 21.5), Vector3(7.2, 4.1, 6.2), "MUD HOUSE", false, "e", "cottage")
-	_house(Vector3(-9.2, 0, 14.2), Vector3(7.2, 4.4, 6.4), "NO BEDS", false, "e", "hostel")
-	_house(Vector3(-9.4, 0, 6.4), Vector3(7.8, 5.0, 7.2), "IRON & ASH", true, "e", "smith")
-	_house(Vector3(-9.6, 0, -2.2), Vector3(8.2, 6.4, 7.6), "ST. DRIP", true, "e", "chapel")
-	_house(Vector3(-9.0, 0, -11.6), Vector3(6.8, 4.0, 5.6), "LEAN-TO", false, "e", "cottage")
-	_house(Vector3(9.2, 0, 21.5), Vector3(7.2, 4.0, 6.2), "COOPER", false, "w", "shop")
-	_house(Vector3(9.2, 0, 14.2), Vector3(7.2, 4.2, 6.4), "HIDE WORKS", false, "w", "shop")
-	_house(Vector3(9.6, 0, 6.2), Vector3(8.4, 6.2, 8.4), "THE GENEROUS CUP", false, "w", "inn")
-	_house(Vector3(9.4, 0, -3.4), Vector3(8.0, 4.3, 7.4), "THE KING'S NAGS", false, "w", "stables")
-	_house(Vector3(8.8, 0, -12.0), Vector3(6.6, 3.9, 5.4), "TALLOW", false, "w", "shop")
-	_box(Vector3(2.6, 2.4, 2.2), Vector3(-3.6, 1.2, 4.2), Color(0.55, 0.42, 0.30), null, true, 2.0)
-	_sign(Vector3(-2.3, 2.35, 4.2), "ROAD TAX")
-	_lantern(Vector3(-2.25, 1.85, 4.2))
-	_lantern(Vector3(-2.35, 2.55, 22.2))
-	_lantern(Vector3(2.35, 2.55, 22.2))
-	_lantern(Vector3(-2.35, 2.55, 14.4))
-	_lantern(Vector3(2.35, 2.55, 14.4))
-	_lantern(Vector3(-2.35, 2.55, 7.6))
-	_lantern(Vector3(2.35, 2.55, 7.6))
-	_lantern(Vector3(-2.35, 2.55, -0.4))
-	_lantern(Vector3(2.35, 2.55, -0.4))
-	_lantern(Vector3(-2.35, 2.55, -16.2))
-	_lantern(Vector3(2.35, 2.55, -16.2))
-	_firepit(Vector3(-5.4, 0, 10.2), true)
-	_firepit(Vector3(5.6, 0, 10.6), false)
-	_firepit(Vector3(-8.2, 0, -16.6), false)
-	_firepit(Vector3(8.2, 0, -16.6), false)
+	_place_town()
 	_build_castle_gate()
-	_sign(Vector3(0, 3.5, 4.1), "ROAD TAX")
 	_plant_forest()
 
 func _castle_piece(src: Dictionary, name: String, pos: Vector3, yaw: float, s: float) -> void:
@@ -200,29 +196,336 @@ func _build_castle_gate() -> void:
 		body.add_child(col)
 		add_child(body)
 
-func _forest_blocked(x: float, z: float, r := 0.0) -> bool:
-	var on_street := z > -22.0 and z < 32.0
-	if on_street and absf(x) < 5.2 + r:
-		return true
-	var houses := [
-		[-9.2, 21.5, 7.2, 6.2],
-		[-9.2, 14.2, 7.2, 6.4],
-		[-9.4, 6.4, 7.8, 7.2],
-		[-9.6, -2.2, 8.2, 7.6],
-		[-9.0, -11.6, 6.8, 5.6],
-		[9.2, 21.5, 7.2, 6.2],
-		[9.2, 14.2, 7.2, 6.4],
-		[9.6, 6.2, 8.4, 8.4],
-		[9.4, -3.4, 8.0, 7.4],
-		[8.8, -12.0, 6.6, 5.4],
-		[-3.6, 4.2, 2.6, 2.2],
-	]
-	for h in houses:
-		if absf(x - h[0]) < h[2] * 0.5 + r and absf(z - h[1]) < h[3] * 0.5 + r:
+func _adopt(n: Node) -> void:
+	if _lot_root != null:
+		_lot_root.add_child(n)
+	else:
+		add_child(n)
+
+func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
+	var t2 := t * t
+	var t3 := t2 * t
+	return 0.5 * (
+		(2.0 * p1)
+		+ (-p0 + p2) * t
+		+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+		+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+	)
+
+func _trace_road() -> void:
+	_road_pts = PackedVector2Array()
+	_road_dst = PackedFloat32Array()
+	var ext: Array[Vector2] = []
+	ext.append(ROAD_KNOTS[0])
+	for k in ROAD_KNOTS:
+		ext.append(k)
+	ext.append(ROAD_KNOTS[ROAD_KNOTS.size() - 1])
+	for i in range(1, ext.size() - 2):
+		for s in 10:
+			_road_pts.append(_catmull(ext[i - 1], ext[i], ext[i + 1], ext[i + 2], float(s) / 10.0))
+	_road_pts.append(ROAD_KNOTS[ROAD_KNOTS.size() - 1])
+	_road_dst.append(0.0)
+	for i in range(1, _road_pts.size()):
+		_road_dst.append(_road_dst[i - 1] + _road_pts[i].distance_to(_road_pts[i - 1]))
+	_road_len = _road_dst[_road_dst.size() - 1]
+	var start := _road_frame(0.0)
+	ditch_pos = Vector3(start["x"], 0.0, start["z"])
+	var saw_east := false
+	var saw_west := false
+	for p in _road_pts:
+		saw_east = saw_east or p.x > 8.0
+		saw_west = saw_west or p.x < -8.0
+	if not saw_east or not saw_west:
+		push_error("Town road does not bend into an S")
+
+func _road_frame(dist: float) -> Dictionary:
+	var d := clampf(dist, 0.0, maxf(_road_len - 0.05, 0.0))
+	var lo := 0
+	var hi := _road_dst.size() - 1
+	while lo < hi - 1:
+		var mid := (lo + hi) >> 1
+		if _road_dst[mid] <= d:
+			lo = mid
+		else:
+			hi = mid
+	var i := mini(lo, _road_pts.size() - 2)
+	var span := maxf(_road_dst[i + 1] - _road_dst[i], 0.0001)
+	var u := clampf((d - _road_dst[i]) / span, 0.0, 1.0)
+	var a := _road_pts[i]
+	var b := _road_pts[i + 1]
+	var tangent := b - a
+	if tangent.length_squared() < 0.000001:
+		tangent = Vector2(0.0, -1.0)
+	else:
+		tangent = tangent.normalized()
+	return {
+		"x": lerpf(a.x, b.x, u),
+		"z": lerpf(a.y, b.y, u),
+		"tx": tangent.x,
+		"tz": tangent.y,
+		"rx": -tangent.y,
+		"rz": tangent.x,
+		"yaw": atan2(-tangent.x, -tangent.y),
+	}
+
+func _road_dist_to(x: float, z: float) -> float:
+	var p := Vector2(x, z)
+	var best := 10000.0
+	for i in range(_road_pts.size() - 1):
+		var a := _road_pts[i]
+		var b := _road_pts[i + 1]
+		var ab := b - a
+		var denom := ab.length_squared()
+		var t := 0.0 if denom < 0.0001 else clampf((p - a).dot(ab) / denom, 0.0, 1.0)
+		best = minf(best, p.distance_to(a + ab * t))
+	return best
+
+func _rect_corners(lot: Dictionary, pad: float) -> Array[Vector2]:
+	var pos: Vector3 = lot["pos"]
+	var size: Vector3 = lot["size"]
+	var yaw: float = float(lot["yaw"])
+	var hx := size.x * 0.5 + pad
+	var hz := size.z * 0.5 + pad
+	var c := cos(yaw)
+	var s := sin(yaw)
+	var out: Array[Vector2] = []
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var lx := float(sx) * hx
+			var lz := float(sz) * hz
+			out.append(Vector2(pos.x + c * lx + s * lz, pos.z - s * lx + c * lz))
+	return out
+
+func _lot_overlaps(a: Dictionary, b: Dictionary, pad: float) -> bool:
+	var pa := _rect_corners(a, pad)
+	var pb := _rect_corners(b, pad)
+	var yaws: Array[float] = [float(a["yaw"]), float(b["yaw"])]
+	for yaw in yaws:
+		var c := cos(yaw)
+		var s := sin(yaw)
+		for axis_i in 2:
+			var ax := c if axis_i == 0 else s
+			var az := -s if axis_i == 0 else c
+			var a0 := 1.0e9
+			var a1 := -1.0e9
+			for p in pa:
+				var v: float = p.x * ax + p.y * az
+				a0 = minf(a0, v)
+				a1 = maxf(a1, v)
+			var b0 := 1.0e9
+			var b1 := -1.0e9
+			for p in pb:
+				var v: float = p.x * ax + p.y * az
+				b0 = minf(b0, v)
+				b1 = maxf(b1, v)
+			if a1 < b0 or b1 < a0:
+				return false
+	return true
+
+func _lot_hits_wall(lot: Dictionary) -> bool:
+	for p in _rect_corners(lot, 0.0):
+		if p.y < -18.5:
 			return true
-	if z < -19.2 + r and absf(x) < 40.0:
+	return false
+
+func _point_in_lot(x: float, z: float, lot: Dictionary, pad: float) -> bool:
+	var pos: Vector3 = lot["pos"]
+	var size: Vector3 = lot["size"]
+	var yaw: float = float(lot["yaw"])
+	var dx := x - pos.x
+	var dz := z - pos.z
+	var c := cos(yaw)
+	var s := sin(yaw)
+	var lx := c * dx - s * dz
+	var lz := s * dx + c * dz
+	return absf(lx) < size.x * 0.5 + pad and absf(lz) < size.z * 0.5 + pad
+
+func _place_town() -> void:
+	# Left bank faces the road: local +X is the walker's right, so that door looks back at the street.
+	# Right-bank lots sit half a plot further along, which leaves a gap on the inside of each bend.
+	var left: Array = [
+		["MUD HOUSE", 7.2, 4.1, 6.2, "e", "cottage", false],
+		["NO BEDS", 7.2, 4.4, 6.4, "e", "hostel", false],
+		["IRON & ASH", 7.8, 5.0, 7.2, "e", "smith", true],
+		["ST. DRIP", 8.2, 6.4, 7.6, "e", "chapel", true],
+		["LEAN-TO", 6.8, 4.0, 5.6, "e", "cottage", false],
+	]
+	var right: Array = [
+		["COOPER", 7.2, 4.0, 6.2, "w", "shop", false],
+		["HIDE WORKS", 7.2, 4.2, 6.4, "w", "shop", false],
+		["THE GENEROUS CUP", 8.4, 6.2, 8.4, "w", "inn", false],
+		["THE KING'S NAGS", 8.0, 4.3, 7.4, "w", "stables", false],
+		["TALLOW", 6.6, 3.9, 5.4, "w", "shop", false],
+	]
+	var li := 0
+	var ri := 0
+	var usable0 := 12.0
+	var usable1 := _road_len - 9.0
+	var span := 4.48
+	while li < left.size() or ri < right.size():
+		var use_left := ri >= right.size() or (li < left.size() and float(li) <= float(ri) + 0.48)
+		var row: Array = left[li] if use_left else right[ri]
+		var u := float(li) if use_left else float(ri) + 0.48
+		var side := -1.0 if use_left else 1.0
+		if use_left:
+			li += 1
+		else:
+			ri += 1
+		var name := str(row[0])
+		var sx := float(row[1])
+		var sy := float(row[2])
+		var sz := float(row[3])
+		var face := str(row[4])
+		var kind := str(row[5])
+		var stone: bool = bool(row[6])
+		var d := usable0 + (usable1 - usable0) * (u / span)
+		var found := false
+		while d < _road_len - 6.0:
+			var frame := _road_frame(d)
+			var off := 4.8 + sx * 0.5
+			var candidate := {
+				"pos": Vector3(frame["x"] + side * float(frame["rx"]) * off, 0.0, frame["z"] + side * float(frame["rz"]) * off),
+				"size": Vector3(sx, sy, sz),
+				"yaw": float(frame["yaw"]),
+			}
+			var blocked := _lot_hits_wall(candidate)
+			if not blocked:
+				for prev in _lots:
+					if _lot_overlaps(candidate, prev, 0.9):
+						blocked = true
+						break
+			if not blocked:
+				_house(candidate["pos"], candidate["size"], name, stone, face, kind, float(frame["yaw"]))
+				found = true
+				break
+			d += 0.2
+		if not found:
+			push_error("No room on the S-curve for %s" % name)
+	_dress_road()
+	if _lots.size() != 10:
+		push_error("S-curve town placed %d lots" % _lots.size())
+	for i in _lots.size():
+		for j in range(i + 1, _lots.size()):
+			if _lot_overlaps(_lots[i], _lots[j], 0.3):
+				push_error("Lots overlap: %s / %s" % [str(_lots[i]["name"]), str(_lots[j]["name"])])
+	if not _booth.is_empty():
+		for lot in _lots:
+			if _lot_overlaps(lot, _booth, 0.15):
+				push_error("Toll booth overlaps %s" % str(lot["name"]))
+
+func _axis_cross() -> Dictionary:
+	var best := _road_frame(8.0)
+	var d := 9.0
+	while d < _road_len - 8.0:
+		var frame := _road_frame(d)
+		if absf(float(frame["x"])) < absf(float(best["x"])):
+			best = frame
+		d += 1.0
+	return best
+
+func _dress_road() -> void:
+	var toll := _axis_cross()
+	var booth_side := -1.0
+	var booth_off := 5.2
+	var pivot := Node3D.new()
+	pivot.position = Vector3(
+		float(toll["x"]) + booth_side * float(toll["rx"]) * booth_off,
+		0.0,
+		float(toll["z"]) + booth_side * float(toll["rz"]) * booth_off
+	)
+	pivot.rotation.y = float(toll["yaw"])
+	add_child(pivot)
+	_lot_root = pivot
+	_box(Vector3(2.2, 2.4, 2.4), Vector3(0.0, 1.2, 0.0), Color(0.55, 0.42, 0.30), null, true, 2.0)
+	_sign(Vector3(1.2, 2.45, 0.0), "ROAD TAX")
+	_lantern(Vector3(1.15, 1.85, 0.0))
+	_lot_root = null
+	_booth = {
+		"pos": pivot.position,
+		"size": Vector3(2.2, 2.4, 2.4),
+		"yaw": float(toll["yaw"]),
+	}
+	_sign(Vector3(float(toll["x"]), 3.4, float(toll["z"])), "ROAD TAX", float(toll["yaw"]))
+	var d := 8.0
+	while d < _road_len - 5.0:
+		var frame := _road_frame(d)
+		for side in [-1.0, 1.0]:
+			_lantern(Vector3(
+				float(frame["x"]) + side * float(frame["rx"]) * 3.05,
+				2.55,
+				float(frame["z"]) + side * float(frame["rz"]) * 3.05
+			))
+		d += 9.0
+	var smith := _lot_named("IRON & ASH")
+	var inn := _lot_named("THE GENEROUS CUP")
+	if not smith.is_empty():
+		_firepit(_porch(smith, 2.2, 2.4), true)
+	if not inn.is_empty():
+		_firepit(_porch(inn, -2.2, 2.4), false)
+	var approach := _road_frame(_road_len - 8.0)
+	for side_v in [-1.0, 1.0]:
+		var side := float(side_v)
+		var pit := Vector3.ZERO
+		var placed := false
+		for off in [6.4, 8.2, 10.0]:
+			pit = Vector3(
+				float(approach["x"]) + side * float(approach["rx"]) * off,
+				0.0,
+				float(approach["z"]) + side * float(approach["rz"]) * off
+			)
+			if not _inside_lot(pit.x, pit.z, 0.8):
+				placed = true
+				break
+		if placed:
+			_firepit(pit, false)
+
+func _assert_stands(who: String, pos: Vector3) -> void:
+	if _inside_lot(pos.x, pos.z, -0.05):
+		push_error("%s is standing inside a building" % who)
+
+func _inside_lot(x: float, z: float, pad: float) -> bool:
+	for lot in _lots:
+		if _point_in_lot(x, z, lot, pad):
+			return true
+	if not _booth.is_empty() and _point_in_lot(x, z, _booth, pad):
 		return true
-	if Vector2(x, z - 28.0).length() < 5.0 + r * 0.35:
+	return false
+
+func _lot_named(lot_name: String) -> Dictionary:
+	for lot in _lots:
+		if str(lot["name"]) == lot_name:
+			return lot
+	return {}
+
+func _porch(lot: Dictionary, along: float, out: float) -> Vector3:
+	return _lot_offset(lot, along, out, true)
+
+func _outer(lot: Dictionary, along: float, out: float) -> Vector3:
+	return _lot_offset(lot, along, out, false)
+
+func _lot_offset(lot: Dictionary, along: float, out: float, toward_road: bool) -> Vector3:
+	var size: Vector3 = lot["size"]
+	var yaw: float = float(lot["yaw"])
+	var inward := 1.0 if str(lot["face"]) == "e" else -1.0
+	if not toward_road:
+		inward = -inward
+	var lx := inward * (size.x * 0.5 + out)
+	var c := cos(yaw)
+	var s := sin(yaw)
+	var pos: Vector3 = lot["pos"]
+	return pos + Vector3(c * lx + s * along, 0.0, -s * lx + c * along)
+
+func _forest_blocked(x: float, z: float, r := 0.0) -> bool:
+	if _road_dist_to(x, z) < 5.4 + r:
+		return true
+	for lot in _lots:
+		if _point_in_lot(x, z, lot, r):
+			return true
+	if not _booth.is_empty() and _point_in_lot(x, z, _booth, r):
+		return true
+	if z < -19.2 + r and absf(x) < 42.0:
+		return true
+	if Vector2(x - ditch_pos.x, z - ditch_pos.z).length() < 6.2 + r * 0.35:
 		return true
 	return false
 
@@ -244,7 +547,7 @@ func _plant_forest() -> void:
 			kind = "bush"
 		elif r < 0.38:
 			kind = "dead"
-		var in_town := absf(x) < 15.5 and z > -16.5 and z < 25.8
+		var in_town := _road_dist_to(x, z) < 18.0
 		if in_town and kind != "bush":
 			continue
 		var rad := 1.05 if kind == "bush" else (6.2 if kind == "dead" else 8.0)
@@ -258,23 +561,17 @@ func _plant_forest() -> void:
 		_psx_tree(kind, Vector3(x, 0, z), rng)
 		placed.append(Vector2(x, z))
 		n += 1
-	var yard := [
-		[-9.2, 21.5, 7.2, 6.2],
-		[-9.2, 14.2, 7.2, 6.4],
-		[-9.4, 6.4, 7.8, 7.2],
-		[-9.6, -2.2, 8.2, 7.6],
-		[-9.0, -11.6, 6.8, 5.6],
-		[9.2, 21.5, 7.2, 6.2],
-		[9.2, 14.2, 7.2, 6.4],
-		[9.6, 6.2, 8.4, 8.4],
-		[9.4, -3.4, 8.0, 7.4],
-		[8.8, -12.0, 6.6, 5.4],
-	]
-	for h in yard:
-		var toward := -1.0 if h[0] < 0.0 else 1.0
-		for oz in [-h[3] * 0.28, h[3] * 0.28]:
-			var bx: float = float(h[0]) + toward * (float(h[2]) * 0.5 + 1.15)
-			var bz: float = float(h[1]) + float(oz)
+	for lot in _lots:
+		var size: Vector3 = lot["size"]
+		var yaw: float = float(lot["yaw"])
+		var outward := -1.0 if str(lot["face"]) == "e" else 1.0
+		var c := cos(yaw)
+		var s := sin(yaw)
+		var pos: Vector3 = lot["pos"]
+		for oz in [-size.z * 0.28, size.z * 0.28]:
+			var lx := outward * (size.x * 0.5 + 1.15)
+			var bx: float = pos.x + c * lx + s * oz
+			var bz: float = pos.z - s * lx + c * oz
 			if _forest_blocked(bx, bz, 0.95):
 				continue
 			_psx_tree("bush", Vector3(bx, 0, bz), rng)
@@ -287,9 +584,9 @@ func _plant_forest() -> void:
 	for i in 1600:
 		var x := (rng.randf() - 0.5) * 96.0
 		var z := (rng.randf() - 0.5) * 88.0 + 4.0
-		if absf(x) < 2.2 and z > -18.0 and z < 30.0:
+		if _road_dist_to(x, z) < 3.4:
 			continue
-		if Vector2(x, z - 28.0).length() < 3.8:
+		if Vector2(x - ditch_pos.x, z - ditch_pos.z).length() < 4.2:
 			continue
 		if grass_mats.is_empty():
 			break
@@ -308,7 +605,7 @@ func _tile_mat(path: String, repeat: float, tint: Color, repeat_y := -1.0) -> St
 	m.uv1_scale = Vector3(repeat, ry, 1)
 	return m
 
-func _ground_patch(pos: Vector3, size: Vector2, mat: Material) -> void:
+func _ground_patch(pos: Vector3, size: Vector2, mat: Material, yaw := 0.0) -> void:
 	# PlaneMesh defaults to FACE_Y (already flat, normal +Y). A -90° X
 	# turn stands it up into a wall you walk through.
 	var plane := PlaneMesh.new()
@@ -318,18 +615,27 @@ func _ground_patch(pos: Vector3, size: Vector2, mat: Material) -> void:
 	mi.mesh = plane
 	mi.material_override = mat
 	mi.position = pos
+	mi.rotation.y = yaw
 	add_child(mi)
 
 func _cobble_path() -> void:
 	var cobble := _tile_mat("res://assets/psx-nature/cobble.png", 3.4, Color(0.83, 0.8, 0.72), 18.0)
-	_ground_patch(Vector3(0, 0.018, 5), Vector2(4.4, 50), cobble)
-	var z := -17.0
-	while z < 28.0:
+	var step := 2.15
+	var d := 5.0
+	while d < _road_len - 2.4:
+		var frame := _road_frame(d)
+		var along := atan2(float(frame["tx"]), float(frame["tz"]))
+		var lift := 0.018 if int(d / step) % 2 == 0 else 0.019
+		_ground_patch(Vector3(float(frame["x"]), lift, float(frame["z"])), Vector2(5.1, step * 1.2), cobble, along)
+		var w := 0.55 + absf(fmod(d * 1.7, 7.0)) * 0.05
 		for side in [-1.0, 1.0]:
-			var w := 0.5 + absf(fmod(z * 13.0, 7.0)) * 0.06
-			_ground_patch(Vector3(side * (2.15 + w * 0.42), 0.017, z), Vector2(w, 2.3), cobble)
-		z += 2.2
-	_ground_patch(Vector3(0, 0.016, 27.2), Vector2(5.4, 4.2), cobble)
+			var ox: float = float(side) * (2.35 + w * 0.35)
+			_ground_patch(Vector3(
+				float(frame["x"]) + float(frame["rx"]) * ox,
+				0.017,
+				float(frame["z"]) + float(frame["rz"]) * ox
+			), Vector2(w, step * 1.2), cobble, along)
+		d += step
 
 func _plant_grass_ground() -> void:
 	var grass := _tile_mat("res://assets/psx-nature/grass_tile.png", 2.2, Color(0.77, 0.83, 0.64))
@@ -339,9 +645,9 @@ func _plant_grass_ground() -> void:
 	while gx <= 76.0:
 		var gz := -70.0
 		while gz <= 76.0:
-			var skip := absf(gx) < 2.15 and gz > -19.0 and gz < 31.0
+			var skip := _road_dist_to(gx, gz) < 7.2
 			skip = skip or (gz < -19.0 and absf(gx) < 38.0)
-			skip = skip or Vector2(gx, gz - 28.0).length() < 3.6
+			skip = skip or Vector2(gx - ditch_pos.x, gz - ditch_pos.z).length() < 6.5
 			if not skip:
 				var mat := moss if int(gx * 13.0 + gz * 7.0) % 5 == 0 else grass
 				var plane := PlaneMesh.new()
@@ -354,22 +660,33 @@ func _plant_grass_ground() -> void:
 				add_child(mi)
 			gz += 8.0
 		gx += 8.0
-	var ez := -16.0
-	while ez <= 26.0:
+	var ed := 6.0
+	while ed < _road_len - 3.0:
+		var frame := _road_frame(ed)
+		var along := atan2(float(frame["tx"]), float(frame["tz"]))
 		for side in [-1.0, 1.0]:
-			_ground_patch(Vector3(side * 2.55, 0.02, ez), Vector2(1.35, 2.8), mix)
-			_ground_patch(Vector3(side * 3.35, 0.021, ez), Vector2(1.5, 2.8), grass)
-		ez += 2.4
-	for lot in [-9.2, 9.2]:
-		for z in [21.5, 14.2, 6.4, -2.2, -11.6]:
-			var plane := PlaneMesh.new()
-			plane.orientation = PlaneMesh.FACE_Y
-			plane.size = Vector2(4.8, 6.2)
-			var mi := MeshInstance3D.new()
-			mi.mesh = plane
-			mi.material_override = grass
-			mi.position = Vector3(lot * 0.52, 0.015, z)
-			add_child(mi)
+			_ground_patch(Vector3(
+				float(frame["x"]) + float(side) * float(frame["rx"]) * 3.35,
+				0.016,
+				float(frame["z"]) + float(side) * float(frame["rz"]) * 3.35
+			), Vector2(1.2, 2.6), mix, along)
+			_ground_patch(Vector3(
+				float(frame["x"]) + float(side) * float(frame["rx"]) * 4.35,
+				0.0165,
+				float(frame["z"]) + float(side) * float(frame["rz"]) * 4.35
+			), Vector2(1.35, 2.6), grass, along)
+		ed += 2.4
+	for lot in _lots:
+		var yard := _porch(lot, 0.0, 1.15)
+		var plane := PlaneMesh.new()
+		plane.orientation = PlaneMesh.FACE_Y
+		plane.size = Vector2(1.7, 3.4)
+		var mi := MeshInstance3D.new()
+		mi.mesh = plane
+		mi.material_override = grass
+		mi.position = Vector3(yard.x, 0.016, yard.z)
+		mi.rotation.y = float(lot["yaw"])
+		add_child(mi)
 
 func _psx_alpha(path: String) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -492,7 +809,9 @@ func _prop(path: String, pos: Vector3, px: float) -> void:
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
-	player.position = DITCH + Vector3(0, 0.9, 0)
+	player.position = ditch_pos + Vector3(0, 0.9, 0)
+	var leave := _road_frame(2.0)
+	yaw = float(leave["yaw"])
 	var cap := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.34
@@ -522,7 +841,7 @@ func _build_ditch() -> void:
 	var bank_mi := MeshInstance3D.new()
 	bank_mi.mesh = bank
 	bank_mi.material_override = bank_mat
-	bank_mi.position = Vector3(0.0, -0.1, 27.7)
+	bank_mi.position = ditch_pos + Vector3(0.0, -0.1, 0.0)
 	add_child(bank_mi)
 	var bed := CylinderMesh.new()
 	bed.top_radius = 3.2
@@ -532,14 +851,28 @@ func _build_ditch() -> void:
 	var bed_mi := MeshInstance3D.new()
 	bed_mi.mesh = bed
 	bed_mi.material_override = mud_mat
-	bed_mi.position = Vector3(0.0, -0.24, 27.7)
+	bed_mi.position = ditch_pos + Vector3(0.0, -0.24, 0.0)
 	add_child(bed_mi)
-	_firepit(Vector3(0.2, 0, 27.4), false)
-	_lantern(Vector3(-2.6, 2.2, 26.4))
-	_lantern(Vector3(2.6, 2.2, 26.4))
+	var mouth := _road_frame(2.4)
+	_firepit(Vector3(
+		float(mouth["x"]) + float(mouth["rx"]) * 1.7,
+		0.0,
+		float(mouth["z"]) + float(mouth["rz"]) * 1.7
+	), false)
+	for side in [-1.0, 1.0]:
+		_lantern(Vector3(
+			ditch_pos.x + side * float(mouth["rx"]) * 3.3,
+			2.2,
+			ditch_pos.z + side * float(mouth["rz"]) * 3.3
+		))
 
+	var nix_at := _road_frame(5.4)
 	fairy = Node3D.new()
-	fairy.position = Vector3(2.6, 1.45, 24.4)
+	fairy.position = Vector3(
+		float(nix_at["x"]) + float(nix_at["rx"]) * 2.3,
+		1.45,
+		float(nix_at["z"]) + float(nix_at["rz"]) * 2.3
+	)
 	var spr := Sprite3D.new()
 	spr.texture = nix_tex
 	spr.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -557,9 +890,18 @@ func _build_ditch() -> void:
 	_tag(fairy, "Nix", 1.15)
 	add_child(fairy)
 
-	_add_gift_node("steel", _make_sword(), Vector3(-1.7, 0.08, 25.4), "E — take the sword. Fight the party.")
-	_add_gift_node("song", _make_lute(), Vector3(0.05, 0.22, 24.6), "E — take the lute. Get invited.")
-	_add_gift_node("spark", _make_book(), Vector3(1.75, 0.08, 25.5), "E — take the spellbook. Blast the party.")
+	var gifts_at := _road_frame(3.3)
+	_add_gift_node("steel", _make_sword(), Vector3(
+		float(gifts_at["x"]) - float(gifts_at["rx"]) * 1.55,
+		0.08,
+		float(gifts_at["z"]) - float(gifts_at["rz"]) * 1.55
+	), "E — take the sword. Fight the party.")
+	_add_gift_node("song", _make_lute(), Vector3(float(gifts_at["x"]), 0.22, float(gifts_at["z"])), "E — take the lute. Get invited.")
+	_add_gift_node("spark", _make_book(), Vector3(
+		float(gifts_at["x"]) + float(gifts_at["rx"]) * 1.6,
+		0.08,
+		float(gifts_at["z"]) + float(gifts_at["rz"]) * 1.6
+	), "E — take the spellbook. Blast the party.")
 	_build_npcs()
 
 func _tag(node: Node3D, text: String, y: float) -> void:
@@ -638,35 +980,65 @@ func _add_gift_node(id: String, node: Node3D, pos: Vector3, hint: String) -> voi
 	gifts.append({ "id": id, "node": node, "hint": hint })
 
 func _build_npcs() -> void:
-	_add_npc("hob", "Hob", Vector3(1.6, 0, 5.2), 0.4, false, [
+	var toll := _axis_cross()
+	var hob_at := Vector3(
+		float(toll["x"]) + float(toll["rx"]) * 1.15,
+		0.0,
+		float(toll["z"]) + float(toll["rz"]) * 1.15
+	)
+	_add_npc("hob", "Hob", hob_at, float(toll["yaw"]), false, [
 		"Road tax. Feast night. Double, unless you're expected.",
 		"If anyone asks, you were a priest. I'm a businessman.",
 	])
-	_add_npc("marta", "Marta", Vector3(4.8, 0, 6.2), -1.2, false, [
+	var marta_at := _porch(_lot_named("THE GENEROUS CUP"), 0.8, 1.8)
+	_add_npc("marta", "Marta", marta_at, float(_lot_named("THE GENEROUS CUP")["yaw"]), false, [
 		"They named this cup after him. The ale tastes like a policy.",
 		"East gallery, first course. That's where he parks what he stole.",
 	])
-	_add_npc("bren", "Guard Bren", Vector3(-5.5, 0, -17.5), 0.0, true, [
+	var gate := _road_frame(_road_len - 4.2)
+	var bren_at := Vector3(
+		float(gate["x"]) - float(gate["rx"]) * 5.2,
+		0.0,
+		float(gate["z"]) - float(gate["rz"]) * 5.2
+	)
+	var cole_at := Vector3(
+		float(gate["x"]) + float(gate["rx"]) * 5.2,
+		0.0,
+		float(gate["z"]) + float(gate["rz"]) * 5.2
+	)
+	_add_npc("bren", "Guard Bren", bren_at, float(gate["yaw"]), true, [
 		"Kitchen door unlatches at the second bell. That's not a gift.",
 		"Keep that iron in its hole. Feast night is noisy enough.",
 	])
-	_add_npc("cole", "Guard Cole", Vector3(5.5, 0, -17.5), 3.14, true, [
+	_add_npc("cole", "Guard Cole", cole_at, float(gate["yaw"]) + PI, true, [
 		"Cousin of a baron, are you? They all are, tonight.",
 		"The swan is already burnt. His Generous Majesty will not notice.",
 	])
-	_add_npc("pell", "Sister Pell", Vector3(-5.2, 0, -2.2), 1.1, false, [
+	var pell_lot := _lot_named("ST. DRIP")
+	_add_npc("pell", "Sister Pell", _porch(pell_lot, 0.4, 1.9), float(pell_lot["yaw"]), false, [
 		"I keep a key because I do not trust doors that belong to kings.",
 		"Mara Venn has a spine. Try not to rescue her like furniture.",
 	])
-	_add_npc("ralf", "Drunk Ralf", Vector3(4.2, 0, 11.4), 2.0, false, [
+	var ralf_lot := _lot_named("HIDE WORKS")
+	var ralf_at := _porch(ralf_lot, 1.2, 1.7)
+	_add_npc("ralf", "Drunk Ralf", ralf_at, float(ralf_lot["yaw"]) + 0.4, false, [
 		"I am Cousin Ralf of the eastern orchards. Ask anyone. Don't.",
 		"If you need a name at the gate, mine is already ruined. Be my guest.",
 	])
-	_add_hound(Vector3(4.8, 0, 9.4))
-	_add_critter("sq1", "Squirrel", "res://assets/sprites/squirrel.png", Vector3(-14.5, 0, 19), 0.01)
-	_add_critter("sq2", "Squirrel", "res://assets/sprites/squirrel.png", Vector3(15.2, 0, 12), 0.01)
-	_add_critter("rat1", "Rat", "res://assets/sprites/rat.png", Vector3(6.2, 0, 8.4), 0.012)
-	_add_critter("rat2", "Rat", "res://assets/sprites/rat.png", Vector3(-3.2, 0, 5.8), 0.012)
+	_add_hound(_porch(ralf_lot, -1.4, 2.6))
+	var mud := _lot_named("MUD HOUSE")
+	var coop := _lot_named("COOPER")
+	_add_critter("sq1", "Squirrel", "res://assets/sprites/squirrel.png", _outer(mud, 0.4, 1.4), 0.01)
+	_add_critter("sq2", "Squirrel", "res://assets/sprites/squirrel.png", _outer(coop, -0.6, 1.3), 0.01)
+	_add_critter("rat1", "Rat", "res://assets/sprites/rat.png", hob_at + Vector3(float(toll["tx"]) * 2.2, 0.0, float(toll["tz"]) * 2.2), 0.012)
+	_add_critter("rat2", "Rat", "res://assets/sprites/rat.png", hob_at - Vector3(float(toll["rx"]) * 1.8, 0.0, float(toll["rz"]) * 1.8), 0.012)
+	_assert_stands("Hob", hob_at)
+	_assert_stands("Marta", marta_at)
+	_assert_stands("Guard Bren", bren_at)
+	_assert_stands("Guard Cole", cole_at)
+	_assert_stands("Sister Pell", _porch(pell_lot, 0.4, 1.9))
+	_assert_stands("Drunk Ralf", ralf_at)
+	_assert_stands("Bramble", _porch(ralf_lot, -1.4, 2.6))
 
 func _add_critter(id: String, npc_name: String, tex: String, pos: Vector3, px: float) -> void:
 	var g := Node3D.new()
@@ -859,7 +1231,7 @@ func _box(size: Vector3, pos: Vector3, color: Color, tex: Texture2D, solid: bool
 		mat.uv1_scale = Vector3(repeat, repeat, 1)
 	mi.material_override = mat
 	mi.position = pos
-	add_child(mi)
+	_adopt(mi)
 	if solid:
 		var body := StaticBody3D.new()
 		var col := CollisionShape3D.new()
@@ -879,7 +1251,7 @@ func _unlit_box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mi.material_override = mat
 	mi.position = pos
-	add_child(mi)
+	_adopt(mi)
 	return mi
 
 func _torch(pos: Vector3, color: Color, energy: float) -> void:
@@ -889,7 +1261,7 @@ func _torch(pos: Vector3, color: Color, energy: float) -> void:
 	light.light_energy = energy
 	light.omni_range = 11.0
 	light.position = pos
-	add_child(light)
+	_adopt(light)
 	fires.append({ "light": light, "base": energy, "seed": pos.x + pos.z })
 
 func _lantern(pos: Vector3) -> void:
@@ -930,8 +1302,14 @@ func _firepit(pos: Vector3, big: bool) -> void:
 	add_child(flame)
 	fires.append({ "light": flame, "base": flame.light_energy, "seed": pos.x * 3.0 })
 
-func _sign(pos: Vector3, text: String) -> void:
-	_box(Vector3(1.7, 0.64, 0.08), pos, Color(0.22, 0.14, 0.08), null, false, 1.0)
+func _sign(pos: Vector3, text: String, yaw := 0.0) -> void:
+	var pivot := Node3D.new()
+	pivot.position = pos
+	pivot.rotation.y = yaw
+	_adopt(pivot)
+	var saved := _lot_root
+	_lot_root = pivot
+	_box(Vector3(1.7, 0.64, 0.08), Vector3.ZERO, Color(0.22, 0.14, 0.08), null, false, 1.0)
 	var lab := Label3D.new()
 	lab.text = text
 	lab.font_size = 42
@@ -939,8 +1317,9 @@ func _sign(pos: Vector3, text: String) -> void:
 	lab.modulate = Color(0.91, 0.84, 0.72)
 	lab.outline_size = 6
 	lab.outline_modulate = Color(0.05, 0.03, 0.02)
-	lab.position = pos + Vector3(0, 0, 0.08)
-	add_child(lab)
+	lab.position = Vector3(0, 0, 0.08)
+	_adopt(lab)
+	_lot_root = saved
 
 func _footprint(size: Vector3, pos: Vector3) -> void:
 	var body := StaticBody3D.new()
@@ -950,7 +1329,7 @@ func _footprint(size: Vector3, pos: Vector3) -> void:
 	col.shape = sh
 	body.position = pos + Vector3(0, size.y * 0.5, 0)
 	body.add_child(col)
-	add_child(body)
+	_adopt(body)
 
 func _street_pose(pos: Vector3, size: Vector3, face: String, outward: float, along: float, height: float) -> Array:
 	var yaw := 0.0
@@ -984,7 +1363,7 @@ func _drop_model(path: String, pos: Vector3, yaw: float, lot: Vector3, file_min:
 	var pivot := Node3D.new()
 	pivot.position = pos
 	pivot.rotation.y = yaw
-	add_child(pivot)
+	_adopt(pivot)
 	var swap := absf(sin(yaw)) > 0.5
 	var span_x := lot.z if swap else lot.x
 	var span_z := lot.x if swap else lot.z
@@ -1006,20 +1385,28 @@ func _module_house(pos: Vector3, size: Vector3, face: String, shell: String, roo
 	var door_node := _instance_building(root + door)
 	door_node.position = door_pose[0] as Vector3
 	door_node.rotation.y = float(door_pose[1])
-	add_child(door_node)
+	_adopt(door_node)
 	var win_pose: Array = _street_pose(pos, size, face, 0.14, 1.45, 1.65)
 	var win := _instance_building(root + "window_square.glb")
 	win.position = win_pose[0] as Vector3
 	win.rotation.y = float(win_pose[1])
-	add_child(win)
+	_adopt(win)
 	if with_chimney:
 		var stack := _instance_building(root + "chimney.glb")
 		stack.position = pos + Vector3(size.x * 0.22, size.y * 0.55, -size.z * 0.18)
 		stack.scale = Vector3(0.42, 0.42, 0.42)
-		add_child(stack)
+		_adopt(stack)
 
-func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: String, kind: String = "") -> void:
-	_footprint(size, pos)
+func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: String, kind: String = "", street_yaw: float = 0.0) -> void:
+	# Local +X is the walker's right once street_yaw aims local -Z down the road.
+	# Face "e" therefore looks at the street from the left bank, "w" from the right.
+	var pivot := Node3D.new()
+	pivot.position = pos
+	pivot.rotation.y = street_yaw
+	add_child(pivot)
+	_lot_root = pivot
+	var at := Vector3.ZERO
+	_footprint(size, at)
 	var front := 1.0 if face == "e" or face == "s" else -1.0
 	# Church door looks along file +Z. Tavern's long front looks along file -Z
 	# (the volume sits on +Z of that wall). Both end up yawed ±90° onto the street.
@@ -1028,33 +1415,33 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 		# axis is the street front. Checked from the cobbles in 4.7.2.
 		var model_front := -1.0
 		var yaw := PI * 0.5 if front / model_front > 0.0 else -PI * 0.5
-		_drop_model("res://assets/psx-buildings/church.glb", pos, yaw, size, Vector3(-449.3, -1.5, -1060.7), Vector3(449.3, 1018.3, 372.2), 0.01, true)
+		_drop_model("res://assets/psx-buildings/church.glb", at, yaw, size, Vector3(-449.3, -1.5, -1060.7), Vector3(449.3, 1018.3, 372.2), 0.01, true)
 	elif kind == "inn":
 		# The tavern's long front (door and windows) looks along file +Z.
 		var model_front := 1.0
 		var yaw := PI * 0.5 if front / model_front > 0.0 else -PI * 0.5
-		_drop_model("res://assets/psx-buildings/tavern.glb", pos, yaw, size, Vector3(-819.8, 0.07, -28.1), Vector3(919.4, 482.2, 475.0), 0.01, true)
+		_drop_model("res://assets/psx-buildings/tavern.glb", at, yaw, size, Vector3(-819.8, 0.07, -28.1), Vector3(919.4, 482.2, 475.0), 0.01, true)
 	elif kind == "smith":
-		_module_house(pos, size, face, "shell_stone.glb", "roof_red.glb", "door_stone.glb", true)
+		_module_house(at, size, face, "shell_stone.glb", "roof_red.glb", "door_stone.glb", true)
 	elif kind == "hostel":
-		_module_house(pos, size, face, "shell_base.glb", "roof_red.glb", "door_wood.glb", true)
+		_module_house(at, size, face, "shell_base.glb", "roof_red.glb", "door_wood.glb", true)
 	elif kind == "stables":
-		_module_house(pos, size, face, "shell_base.glb", "roof_straw.glb", "door_wood.glb", false)
+		_module_house(at, size, face, "shell_base.glb", "roof_straw.glb", "door_wood.glb", false)
 	elif kind == "shop":
-		var roof := "roof_blue.glb" if pos.z > 0.0 else "roof_red.glb"
-		_module_house(pos, size, face, "shell_plaster.glb", roof, "door_wood.glb", false)
+		var roof := "roof_blue.glb" if pos.z > 8.0 else "roof_red.glb"
+		_module_house(at, size, face, "shell_plaster.glb", roof, "door_wood.glb", false)
 	else:
-		_module_house(pos, size, face, "shell_plaster.glb", "roof_straw.glb", "door_wood.glb", false)
-	var fx := pos.x
-	var fz := pos.z
+		_module_house(at, size, face, "shell_plaster.glb", "roof_straw.glb", "door_wood.glb", false)
+	var fx := at.x
+	var fz := at.z
 	if face == "e":
-		fx = pos.x + size.x * 0.5
+		fx = at.x + size.x * 0.5
 	elif face == "w":
-		fx = pos.x - size.x * 0.5
+		fx = at.x - size.x * 0.5
 	elif face == "s":
-		fz = pos.z + size.z * 0.5
+		fz = at.z + size.z * 0.5
 	else:
-		fz = pos.z - size.z * 0.5
+		fz = at.z - size.z * 0.5
 	_sign(Vector3(fx, size.y + 0.28, fz), name)
 	_wall_lantern(Vector3(fx, 2.2, fz))
 	var glow := OmniLight3D.new()
@@ -1062,7 +1449,16 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 	glow.light_energy = 1.1
 	glow.omni_range = 6.0
 	glow.position = Vector3(fx, 1.7, fz)
-	add_child(glow)
+	_adopt(glow)
+	_lot_root = null
+	_lots.append({
+		"pos": pos,
+		"size": size,
+		"yaw": street_yaw,
+		"face": face,
+		"kind": kind,
+		"name": name,
+	})
 
 func _shop(pos: Vector3, size: Vector3, name: String, stone: bool) -> void:
 	_house(pos, size, name, stone, "s")
@@ -1164,7 +1560,7 @@ func _build_hud() -> void:
 	col.add_child(title)
 
 	var blurb := Label.new()
-	blurb.text = "The cinematic opens later. After it, you wake in the mud.\nA marsh fairy has four ways to get your wife back from the king."
+	blurb.text = "The cinematic opens later. After it, you wake in the mud.\nThe cobbles run an S through Harth to the king's gate. A marsh fairy has four ways in."
 	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_ink(blurb, 16)
