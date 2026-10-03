@@ -9,9 +9,13 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 CC0. The author says no credits are required. Credited here anyway.
 
 - `church.glb` + `Church.png` — St. Drip. Converted from the pack's `Church.fbx`. The texture file in the zip is `ChurchTexture.png`; the FBX looks for `Church.png`.
-- `tavern.glb` + `TavernTexture.jpg` — converted from `Tavern.fbx`. Not placed. The old inn lot is The Closed Fist, an open forge bay beside a closed shop. See `godot/assets/psx-smith/CREDITS.md`.
+- `tavern.glb` + `TavernTexture.jpg` — converted from `Tavern.fbx`. Not placed. Fitting that long front into a Harth lot crushes it, so the hostel and the stables are built from the modular pieces instead. The old inn lot is The Closed Fist. See `godot/assets/psx-smith/CREDITS.md`.
 
-## Cottages, hostel, smith, shops, stables
+## Cottages, hostel, shops, stables
+
+Harth lots other than St. Drip and The Closed Fist are several of these modules at near native size: a street bay, a side wing, and a stone shed behind when the plot is deep enough. Tall lots (No Beds, Char Heap) keep a stone or plaster ground floor and add a timber-and-plaster upper storey. The King's Nags and the Lean-to are open stall fronts — posts, a half wall, a dark interior — under a thatch roof, not a second forge. Doors, windows, chimneys, and roofs are the pack's own meshes. Corner posts and the upper floor use the blacksmith's bark, brick, and plaster so the lots sit next to The Closed Fist.
+
+## Pack pieces
 PSX style going medieval — valsekamerplant
 https://valsekamerplant.itch.io/psx-style-going-medieval
 

@@ -749,33 +749,7 @@ func _plant_grass_ground() -> void:
 				add_child(mi)
 			gz += 8.0
 		gx += 8.0
-	var ed := 6.0
-	while ed < _road_len - 3.0:
-		var frame := _road_frame(ed)
-		var along := atan2(float(frame["tx"]), float(frame["tz"]))
-		for side in [-1.0, 1.0]:
-			_ground_patch(Vector3(
-				float(frame["x"]) + float(side) * float(frame["rx"]) * 3.35,
-				0.016,
-				float(frame["z"]) + float(side) * float(frame["rz"]) * 3.35
-			), Vector2(1.2, 2.6), mix, along)
-			_ground_patch(Vector3(
-				float(frame["x"]) + float(side) * float(frame["rx"]) * 4.35,
-				0.0165,
-				float(frame["z"]) + float(side) * float(frame["rz"]) * 4.35
-			), Vector2(1.35, 2.6), grass, along)
-		ed += 2.4
-	for lot in _lots:
-		var yard := _porch(lot, 0.0, 1.15)
-		var plane := PlaneMesh.new()
-		plane.orientation = PlaneMesh.FACE_Y
-		plane.size = Vector2(1.7, 3.4)
-		var mi := MeshInstance3D.new()
-		mi.mesh = plane
-		mi.material_override = grass
-		mi.position = Vector3(yard.x, 0.016, yard.z)
-		mi.rotation.y = float(lot["yaw"])
-		add_child(mi)
+	_plant_verge(mix, grass)
 
 func _psx_alpha(path: String) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -2071,24 +2045,381 @@ func _drop_model(path: String, pos: Vector3, yaw: float, lot: Vector3, file_min:
 	mesh.position = Vector3(-center.x * sc.x, -file_min.y * sc.y, -center.z * sc.z)
 	pivot.add_child(mesh)
 
-func _module_house(pos: Vector3, size: Vector3, face: String, shell: String, roof: String, door: String, with_chimney: bool) -> void:
+func _hash01(n: float) -> float:
+	var s := sin(n * 127.1) * 43758.5453
+	return s - floor(s)
+
+func _verge_clear(x: float, z: float) -> bool:
+	if _inside_lot(x, z, 0.2):
+		return false
+	if not _booth.is_empty() and _point_in_lot(x, z, _booth, 0.4):
+		return false
+	if _road_dist_to(x, z) < ROAD_HALF + 0.35:
+		return false
+	if _near_street_lamp(x, z):
+		return false
+	if z < -19.0 and absf(x) < 36.0:
+		return false
+	for spot in _fence_spots:
+		if Vector2(x - spot.x, z - spot.z).length() < 0.62:
+			return false
+	for lot in _lots:
+		var door := _porch(lot, 0.0, 1.05)
+		if Vector2(x - door.x, z - door.z).length() < 1.2:
+			return false
+	return true
+
+func _verge_rock(pos: Vector3, rng: RandomNumberGenerator) -> void:
+	var path := "res://assets/psx-nature/small_rock_grassy.glb"
+	var sc := 0.75 + rng.randf() * 0.85
+	if rng.randf() > 0.7:
+		path = "res://assets/psx-nature/rock_grassy.glb"
+		sc = 0.26 + rng.randf() * 0.22
+	var packed: PackedScene = load(path) as PackedScene
+	if packed == null:
+		return
+	var inst := packed.instantiate() as Node3D
+	inst.position = pos
+	inst.rotation.y = rng.randf() * TAU
+	inst.scale = Vector3(sc, sc * (0.65 + rng.randf() * 0.45), sc)
+	_unshade(inst, false)
+	add_child(inst)
+
+func _plant_verge(mix: Material, grass: Material) -> void:
+	# Broken dirt, stones, and weeds along the ribbon. The walkable width stays put.
+	var dirt := _dirt_mat(Color(0.94, 0.9, 0.8), 1.35)
+	dirt.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_watch_night(dirt)
+	var bush_cards: Array[StandardMaterial3D] = []
+	for i in range(1, 5):
+		var card := _psx_alpha("res://assets/psx-nature/grass_bush_%d.png" % i)
+		_watch_night(card)
+		bush_cards.append(card)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 90210
+	var tongues := 0
+	var stones := 0
+	var d := 5.2
+	while d < _road_len - 2.2:
+		var frame := _road_frame(d)
+		var along := atan2(float(frame["tx"]), float(frame["tz"]))
+		for side_v in [-1.0, 1.0]:
+			var side := float(side_v)
+			var n1 := _hash01(d * 1.7 + side * 4.2)
+			var n2 := _hash01(d * 2.9 + side * 8.1)
+			var n3 := _hash01(d * 0.41 + side * 2.2)
+			if n1 > 0.22:
+				var width := 0.7 + n2 * 2.15
+				var length := 0.65 + n3 * 1.85
+				var lateral := 2.35 + n2 * 2.45
+				var inner := lateral - width * 0.5
+				if inner < 2.2:
+					lateral += 2.2 - inner
+					inner = 2.2
+				var y := 0.034 + n1 * 0.008 if inner < 2.85 else 0.018 + n2 * 0.006
+				var shift := (n3 - 0.5) * 1.1
+				var pos := Vector3(
+					float(frame["x"]) + side * float(frame["rx"]) * lateral + float(frame["tx"]) * shift,
+					y,
+					float(frame["z"]) + side * float(frame["rz"]) * lateral + float(frame["tz"]) * shift
+				)
+				if not _inside_lot(pos.x, pos.z, -0.15):
+					var mat: Material = dirt if n3 > 0.22 else mix
+					_ground_patch(pos, Vector2(width, length), mat, along + (n1 - 0.5) * 0.9)
+					tongues += 1
+			if n2 > 0.62:
+				var glat := 4.35 + n1 * 1.9
+				var gpos := Vector3(
+					float(frame["x"]) + side * float(frame["rx"]) * glat + float(frame["tx"]) * (n3 - 0.5),
+					0.019,
+					float(frame["z"]) + side * float(frame["rz"]) * glat + float(frame["tz"]) * (n3 - 0.5)
+				)
+				if not _inside_lot(gpos.x, gpos.z, 0.05) and _road_dist_to(gpos.x, gpos.z) > ROAD_HALF + 0.55:
+					_ground_patch(gpos, Vector2(0.45 + n3 * 0.7, 0.4 + n1 * 0.55), grass, along + n2 * 1.6)
+			if n1 > 0.34 and not grass_mats.is_empty():
+				var wlat := 3.15 + n3 * 2.05
+				var wx: float = float(frame["x"]) + side * float(frame["rx"]) * wlat + float(frame["tx"]) * (n2 - 0.5) * 0.7
+				var wz: float = float(frame["z"]) + side * float(frame["rz"]) * wlat + float(frame["tz"]) * (n2 - 0.5) * 0.7
+				if _road_dist_to(wx, wz) > ROAD_HALF + 0.2 and not _inside_lot(wx, wz, 0.02) and not _near_street_lamp(wx, wz):
+					var h := 0.42 + n2 * 0.6
+					var card: Material = bush_cards[int(absf(d + side * 3.0)) % bush_cards.size()] if n3 > 0.45 and bush_cards.size() > 0 else grass_mats[int(absf(d * 3.0 + side)) % grass_mats.size()]
+					_psx_card(card, Vector3(wx, h * 0.48, wz), 0.55 + n1 * 0.7, h, along + n2 * 2.0)
+		if _hash01(d * 5.1) > 0.38:
+			var rock_side := -1.0 if _hash01(d * 9.0) > 0.5 else 1.0
+			var slat := 3.05 + _hash01(d * 4.4) * 1.55
+			var sx: float = float(frame["x"]) + rock_side * float(frame["rx"]) * slat
+			var sz: float = float(frame["z"]) + rock_side * float(frame["rz"]) * slat
+			if _verge_clear(sx, sz):
+				_verge_rock(Vector3(sx, 0.0, sz), rng)
+				stones += 1
+		if _hash01(d * 2.15) > 0.84 and haunted_bushes.size() > 0:
+			var bush_side := 1.0 if _hash01(d * 6.6) > 0.5 else -1.0
+			var blat := 3.7 + _hash01(d * 3.3) * 1.5
+			var bx: float = float(frame["x"]) + bush_side * float(frame["rx"]) * blat
+			var bz: float = float(frame["z"]) + bush_side * float(frame["rz"]) * blat
+			if _verge_clear(bx, bz):
+				var bush := haunted_bushes[rng.randi() % haunted_bushes.size()].instantiate() as Node3D
+				_fit_plant(bush, Vector3(bx, 0.0, bz), 0.75 + rng.randf() * 0.6, rng)
+		d += 1.35
+	for lot in _lots:
+		_wear_lot_apron(lot, dirt)
+	if tongues < 12:
+		push_error("Road verge is too smooth")
+	if stones < 6:
+		push_error("Road verge has no stones")
+
+func _wear_lot_apron(lot: Dictionary, dirt: Material) -> void:
+	var yaw: float = float(lot["yaw"])
+	var seed_x: float = float((lot["pos"] as Vector3).x)
+	for i in 3:
+		var along := (float(i) - 1.0) * 0.9 + (_hash01(seed_x + float(i) * 2.7) - 0.5) * 0.7
+		var out := 0.55 + float(i) * 0.5 + _hash01(seed_x * 0.3 + float(i)) * 0.35
+		var p := _porch(lot, along, out)
+		if _inside_lot(p.x, p.z, 0.02):
+			continue
+		if _road_dist_to(p.x, p.z) < ROAD_HALF + 0.2:
+			continue
+		_ground_patch(Vector3(p.x, 0.032, p.z), Vector2(0.55 + float(i) * 0.28, 0.45 + _hash01(float(i) + seed_x) * 0.5), dirt, yaw + (float(i) - 1.0) * 0.45)
+	if grass_mats.is_empty():
+		return
+	var weed := _porch(lot, 1.45, 0.7)
+	if not _inside_lot(weed.x, weed.z, 0.05) and _road_dist_to(weed.x, weed.z) > ROAD_HALF + 0.25:
+		_fist_weed(weed, yaw + 0.4, 1.15)
+
+func _kit_mat(path: String, tile: float, tint: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(path)
+	m.albedo_color = tint
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.uv1_scale = Vector3(tile, tile, 1.0)
+	return m
+
+func _flat_mat(tint: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = tint
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	return m
+
+func _kit_box(size: Vector3, pos: Vector3, rot: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mi.mesh = box
+	mi.position = pos
+	mi.rotation = rot
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_adopt(mi)
+
+func _face_out(face: String) -> float:
+	if face == "e" or face == "s":
+		return 1.0
+	return -1.0
+
+func _face_yaw(face: String) -> float:
+	if face == "e":
+		return PI * 0.5
+	if face == "w":
+		return -PI * 0.5
+	if face == "n":
+		return PI
+	return 0.0
+
+func _gm_block(center: Vector3, span: Vector3, shell: String, roof: String, with_roof: bool) -> void:
 	var root := "res://assets/psx-buildings/"
-	_drop_model(root + shell, pos, 0.0, size, Vector3(0, 0, -4), Vector3(4, 3, 0), 1.0, true)
-	_drop_model(root + roof, pos + Vector3(0, size.y, 0), 0.0, size, Vector3(0, -0.37, -4.38), Vector3(4, 2.19, 0.38), 1.0, false)
-	var door_pose: Array = _street_pose(pos, size, face, 0.12, 0.0, 0.0)
-	var door_node := _instance_building(root + door)
-	door_node.position = door_pose[0] as Vector3
-	door_node.rotation.y = float(door_pose[1])
-	_adopt(door_node)
-	var win_pose: Array = _street_pose(pos, size, face, 0.14, 1.45, 1.65)
-	var win := _instance_building(root + "window_square.glb")
-	win.position = win_pose[0] as Vector3
-	win.rotation.y = float(win_pose[1])
+	_drop_model(root + shell, center, 0.0, span, Vector3(0, 0, -4), Vector3(4, 3, 0), 1.0, true)
+	if not with_roof:
+		return
+	var roof_span := Vector3(span.x * 1.12, span.y, span.z * 1.1)
+	_drop_model(root + roof, center + Vector3(0, span.y, 0), 0.0, roof_span, Vector3(0, -0.37, -4.38), Vector3(4, 2.19, 0.38), 1.0, false)
+
+func _place_window(face: String, at: Vector3, sill: float) -> void:
+	var win := _instance_building("res://assets/psx-buildings/window_square.glb")
+	win.position = Vector3(at.x, sill, at.z)
+	win.rotation.y = _face_yaw(face)
+	win.scale = Vector3(0.82, 0.82, 0.82)
 	_adopt(win)
-	if with_chimney:
+
+func _place_door(face: String, at: Vector3) -> void:
+	var door := _instance_building("res://assets/psx-buildings/door_wood.glb")
+	door.position = at
+	door.rotation.y = _face_yaw(face)
+	_adopt(door)
+
+func _trade_spec(lot_name: String) -> Dictionary:
+	if lot_name == "MUD HOUSE":
+		return {"open": false, "shell": "shell_base.glb", "roof": "roof_straw.glb", "stories": 1, "wing": true, "chimney": false, "windows": 2, "stalls": 0, "soot": 1.0}
+	elif lot_name == "NO BEDS":
+		return {"open": false, "shell": "shell_base.glb", "roof": "roof_red.glb", "stories": 2, "wing": true, "chimney": true, "windows": 2, "stalls": 0, "soot": 0.92}
+	elif lot_name == "CHAR HEAP":
+		return {"open": false, "shell": "shell_stone.glb", "roof": "roof_red.glb", "stories": 2, "wing": true, "chimney": false, "windows": 1, "stalls": 0, "soot": 0.62}
+	elif lot_name == "LEAN-TO":
+		return {"open": true, "shell": "shell_plaster.glb", "roof": "roof_straw.glb", "stories": 1, "wing": false, "chimney": false, "windows": 0, "stalls": 1, "soot": 0.9}
+	elif lot_name == "COOPER":
+		return {"open": false, "shell": "shell_base.glb", "roof": "roof_blue.glb", "stories": 1, "wing": true, "chimney": false, "windows": 2, "stalls": 0, "soot": 1.0}
+	elif lot_name == "HIDE WORKS":
+		return {"open": false, "shell": "shell_base.glb", "roof": "roof_red.glb", "stories": 1, "wing": true, "chimney": false, "windows": 2, "stalls": 0, "soot": 0.86}
+	elif lot_name == "THE KING'S NAGS":
+		return {"open": true, "shell": "shell_stone.glb", "roof": "roof_straw.glb", "stories": 1, "wing": false, "chimney": false, "windows": 1, "stalls": 3, "soot": 0.9}
+	elif lot_name == "TALLOW":
+		return {"open": false, "shell": "shell_plaster.glb", "roof": "roof_blue.glb", "stories": 1, "wing": false, "chimney": true, "windows": 2, "stalls": 0, "soot": 0.94}
+	else:
+		push_error("No trade house for %s" % lot_name)
+		return {"open": false, "shell": "shell_plaster.glb", "roof": "roof_straw.glb", "stories": 1, "wing": false, "chimney": false, "windows": 1, "stalls": 0, "soot": 1.0}
+
+func _facade_bones(face: String, center: Vector3, span: Vector3, bark: Material, stone: Material) -> void:
+	var s := _face_out(face)
+	var x_face := center.x + s * span.x * 0.5
+	var y1 := center.y + span.y
+	var z0 := center.z - span.z * 0.5
+	var z1 := center.z + span.z * 0.5
+	var skirt_x := x_face + s * 0.1
+	# Gap the stone skirt and the ground beam around the street door.
+	if z0 < -0.72:
+		_kit_box(Vector3(0.36, 0.42, -0.72 - z0), Vector3(skirt_x, 0.2, (z0 - 0.72) * 0.5), Vector3.ZERO, stone)
+		_kit_box(Vector3(0.1, 0.1, -0.72 - z0), Vector3(x_face + s * 0.07, center.y + 0.38, (z0 - 0.72) * 0.5), Vector3.ZERO, bark)
+	if z1 > 0.72:
+		_kit_box(Vector3(0.36, 0.42, z1 - 0.72), Vector3(skirt_x, 0.2, (z1 + 0.72) * 0.5), Vector3.ZERO, stone)
+		_kit_box(Vector3(0.1, 0.1, z1 - 0.72), Vector3(x_face + s * 0.07, center.y + 0.38, (z1 + 0.72) * 0.5), Vector3.ZERO, bark)
+	var zs: Array[float] = [z0, z1]
+	for z in zs:
+		_kit_box(Vector3(0.16, span.y, 0.16), Vector3(x_face + s * 0.07, center.y + span.y * 0.5, z), Vector3.ZERO, bark)
+	_kit_box(Vector3(0.12, 0.14, span.z + 0.12), Vector3(x_face + s * 0.08, y1 - 0.08, center.z), Vector3.ZERO, bark)
+	_kit_box(Vector3(0.08, 0.08, span.z * 0.34), Vector3(x_face + s * 0.09, center.y + span.y * 0.62, z0 + span.z * 0.22), Vector3(0.55, 0, 0), bark)
+	_kit_box(Vector3(0.08, 0.08, span.z * 0.34), Vector3(x_face + s * 0.09, center.y + span.y * 0.62, z1 - span.z * 0.22), Vector3(-0.55, 0, 0), bark)
+
+func _upper_storey(face: String, center: Vector3, span: Vector3, y0: float, y1: float, plaster: Material, bark: Material) -> void:
+	var s := _face_out(face)
+	var h := maxf(y1 - y0, 0.8)
+	var mid := y0 + h * 0.5
+	var fx := center.x + s * span.x * 0.5
+	var bx := center.x - s * span.x * 0.5
+	_kit_box(Vector3(0.18, h, span.z), Vector3(fx - s * 0.09, mid, center.z), Vector3.ZERO, plaster)
+	_kit_box(Vector3(0.16, h, span.z), Vector3(bx + s * 0.08, mid, center.z), Vector3.ZERO, plaster)
+	_kit_box(Vector3(span.x, h, 0.16), Vector3(center.x, mid, center.z - span.z * 0.5), Vector3.ZERO, plaster)
+	_kit_box(Vector3(span.x, h, 0.16), Vector3(center.x, mid, center.z + span.z * 0.5), Vector3.ZERO, plaster)
+	_kit_box(Vector3(0.14, 0.16, span.z + 0.1), Vector3(fx + s * 0.05, y0 + 0.08, center.z), Vector3.ZERO, bark)
+	_kit_box(Vector3(0.12, 0.14, span.z + 0.08), Vector3(fx + s * 0.06, y1 - 0.07, center.z), Vector3.ZERO, bark)
+	var zs: Array[float] = [-span.z * 0.5, span.z * 0.5]
+	for z in zs:
+		_kit_box(Vector3(0.15, h, 0.15), Vector3(fx + s * 0.07, mid, center.z + z), Vector3.ZERO, bark)
+	_place_window(face, Vector3(fx + s * 0.06, 0.0, center.z), y0 + h * 0.28)
+
+func _open_stall(size: Vector3, face: String, bays: int, roof_name: String, stone_wall: bool, soot: float) -> void:
+	var s := _face_out(face)
+	var depth := minf(size.x * 0.64, 5.6)
+	var width := size.z * 0.92
+	var wall_h := size.y
+	var cx := s * (size.x * 0.5 - depth * 0.5)
+	var tint := Color(0.78 * soot, 0.72 * soot, 0.62 * soot)
+	var bark := _kit_mat("res://assets/psx-smith/workshop_OakBark.jpg", 1.6, Color(0.7, 0.62, 0.5))
+	var plaster := _kit_mat("res://assets/psx-smith/workshop_PlasterLarge.jpg", 0.55, tint)
+	var stone := _kit_mat("res://assets/psx-smith/workshop_GreyBricks.jpg", 0.85, Color(0.7 * soot, 0.68 * soot, 0.64 * soot))
+	var wall_mat: Material = stone if stone_wall else plaster
+	var dark := _flat_mat(Color(0.06, 0.05, 0.045))
+	_kit_box(Vector3(depth - 0.45, wall_h * 0.7, width - 0.5), Vector3(cx - s * 0.12, wall_h * 0.35, 0.0), Vector3.ZERO, dark)
+	var back_x := cx - s * (depth * 0.5 - 0.12)
+	_kit_box(Vector3(0.24, wall_h, width), Vector3(back_x, wall_h * 0.5, 0.0), Vector3.ZERO, wall_mat)
+	var side_zs: Array[float] = [-width * 0.5 + 0.1, width * 0.5 - 0.1]
+	for zz in side_zs:
+		_kit_box(Vector3(depth, wall_h, 0.2), Vector3(cx, wall_h * 0.5, zz), Vector3.ZERO, wall_mat)
+	var front_x := cx + s * (depth * 0.5 - 0.06)
+	var bay_w := width / float(bays)
+	for i in range(bays + 1):
+		var z := -width * 0.5 + bay_w * float(i)
+		_kit_box(Vector3(0.18, wall_h, 0.18), Vector3(front_x, wall_h * 0.5, z), Vector3.ZERO, bark)
+	var open_i := int(bays / 2)
+	for i in bays:
+		if bays > 1 and i == open_i:
+			continue
+		var zc := -width * 0.5 + bay_w * (float(i) + 0.5)
+		var half_w := bay_w * 0.42 if bays == 1 else bay_w - 0.24
+		var half_z := zc - bay_w * 0.22 if bays == 1 else zc
+		_kit_box(Vector3(0.14, 1.05, half_w), Vector3(front_x, 0.52, half_z), Vector3.ZERO, wall_mat)
+	_kit_box(Vector3(0.16, 0.16, width + 0.08), Vector3(front_x + s * 0.04, wall_h - 0.08, 0.0), Vector3.ZERO, bark)
+	_kit_box(Vector3(0.38, 0.42, width + 0.12), Vector3(front_x + s * 0.08, 0.2, 0.0), Vector3.ZERO, stone)
+	var roof_span := Vector3(depth + 0.85, wall_h, width + 0.4)
+	_drop_model("res://assets/psx-buildings/" + roof_name, Vector3(cx + s * 0.2, wall_h, 0.0), 0.0, roof_span, Vector3(0, -0.37, -4.38), Vector3(4, 2.19, 0.38), 1.0, false)
+	var door_z := -width * 0.5 + bay_w * 0.5
+	if bays > 1:
+		door_z = -width * 0.5 + bay_w * (float(open_i) + 0.5)
+	_place_door(face, Vector3(back_x + s * 0.16, 0.0, door_z))
+	if bays >= 3:
+		var win_z := width * 0.5 - bay_w * 0.5
+		_place_window(face, Vector3(front_x + s * 0.04, 0.0, win_z), 1.55)
+
+func _trade_house(pos: Vector3, size: Vector3, face: String, lot_name: String) -> void:
+	var spec := _trade_spec(lot_name)
+	var root := "res://assets/psx-buildings/"
+	if bool(spec["open"]):
+		_open_stall(size, face, int(spec["stalls"]), str(spec["roof"]), str(spec["shell"]) == "shell_stone.glb", float(spec["soot"]))
+		return
+	var s := _face_out(face)
+	var wing: bool = bool(spec["wing"])
+	var stories := int(spec["stories"])
+	var main_w := size.z * (0.58 if wing else 0.9)
+	var main_d := minf(size.x * 0.56, 4.5)
+	var main_h := size.y if stories < 2 else minf(3.05, size.y * 0.58)
+	var main_z := 0.0 if not wing else -size.z * 0.16
+	var main_x := s * (size.x * 0.5 - main_d * 0.5)
+	var main_center := pos + Vector3(main_x, 0.0, main_z)
+	var shell := str(spec["shell"])
+	var roof := str(spec["roof"])
+	var top_is_roof := stories < 2
+	_gm_block(main_center, Vector3(main_d, main_h, main_w), shell, roof, top_is_roof)
+	var soot := float(spec["soot"])
+	var bark := _kit_mat("res://assets/psx-smith/workshop_OakBark.jpg", 1.5, Color(0.72, 0.64, 0.52))
+	var stone := _kit_mat("res://assets/psx-smith/workshop_GreyBricks.jpg", 0.9, Color(0.72, 0.7, 0.66))
+	var plaster := _kit_mat("res://assets/psx-smith/workshop_PlasterLarge.jpg", 0.5, Color(0.9 * soot, 0.84 * soot, 0.74 * soot))
+	_facade_bones(face, main_center, Vector3(main_d, main_h if stories < 2 else size.y, main_w), bark, stone)
+	if stories >= 2:
+		_upper_storey(face, main_center, Vector3(main_d, main_h, main_w), main_h, size.y, plaster, bark)
+		var roof_span := Vector3(main_d + 0.7, size.y, main_w + 0.4)
+		_drop_model(root + roof, main_center + Vector3(s * 0.18, size.y, 0.0), 0.0, roof_span, Vector3(0, -0.37, -4.38), Vector3(4, 2.19, 0.38), 1.0, false)
+	var shed_d := minf(2.9, size.x - main_d - 0.2)
+	if shed_d >= 2.45:
+		var shed_w := main_w * 0.72
+		var shed_h := minf(2.85, size.y * 0.66)
+		var shed_x := main_x - s * (main_d * 0.5 + shed_d * 0.5 - 0.06)
+		var shed_center := pos + Vector3(shed_x, 0.0, main_z - 0.25)
+		_gm_block(shed_center, Vector3(shed_d, shed_h, shed_w), "shell_stone.glb", "roof_straw.glb", true)
+	if wing:
+		var wing_w := size.z * 0.34
+		var wing_d := main_d * 0.82
+		var wing_h := size.y * 0.72
+		var wing_z := main_z + main_w * 0.5 + wing_w * 0.42
+		var limit := size.z * 0.5 - wing_w * 0.5 - 0.05
+		if wing_z > limit:
+			wing_z = limit
+		var wing_x := s * (size.x * 0.5 - wing_d * 0.5 - 0.22)
+		var wing_roof := "roof_straw.glb" if roof != "roof_straw.glb" else "roof_red.glb"
+		var wing_shell := "shell_stone.glb" if shell == "shell_stone.glb" else "shell_plaster.glb"
+		_gm_block(pos + Vector3(wing_x, 0.0, wing_z), Vector3(wing_d, wing_h, wing_w), wing_shell, wing_roof, true)
+		_place_window(face, pos + Vector3(wing_x + s * (wing_d * 0.5 + 0.06), 0.0, wing_z), 1.25)
+	var want := int(spec["windows"])
+	var placed := 0
+	var offsets: Array[float] = [main_z - main_w * 0.3, main_z + main_w * 0.3]
+	for along in offsets:
+		if placed >= want:
+			break
+		if absf(along) < 0.85:
+			continue
+		var win_pose: Array = _street_pose(pos, size, face, 0.08, along, 0.0)
+		_place_window(face, win_pose[0] as Vector3, 1.5 if stories < 2 else 1.25)
+		placed += 1
+	if placed < 1 and want > 0:
+		var fallback := main_z + main_w * 0.34
+		var win_pose2: Array = _street_pose(pos, size, face, 0.08, fallback, 0.0)
+		_place_window(face, win_pose2[0] as Vector3, 1.5)
+	var door_pose: Array = _street_pose(pos, size, face, 0.1, 0.0, 0.0)
+	_place_door(face, door_pose[0] as Vector3)
+	if bool(spec["chimney"]):
 		var stack := _instance_building(root + "chimney.glb")
-		stack.position = pos + Vector3(size.x * 0.22, size.y * 0.55, -size.z * 0.18)
-		stack.scale = Vector3(0.42, 0.42, 0.42)
+		stack.position = pos + Vector3(main_x - s * main_d * 0.18, size.y * 0.78, main_z + main_w * 0.16)
+		stack.scale = Vector3(0.34, 0.34, 0.34)
 		_adopt(stack)
 
 func _road_along(x: float, z: float) -> float:
@@ -2685,15 +3016,8 @@ func _house(pos: Vector3, size: Vector3, name: String, _stone: bool, face: Strin
 		_drop_model("res://assets/psx-buildings/tavern.glb", at, yaw, size, Vector3(-819.8, 0.07, -28.1), Vector3(919.4, 482.2, 475.0), 0.01, true)
 	elif kind == "smith":
 		smith_extra = _open_workshop(face, name)
-	elif kind == "hostel":
-		_module_house(at, size, face, "shell_base.glb", "roof_red.glb", "door_wood.glb", true)
-	elif kind == "stables":
-		_module_house(at, size, face, "shell_base.glb", "roof_straw.glb", "door_wood.glb", false)
-	elif kind == "shop":
-		var roof := "roof_blue.glb" if pos.z > 8.0 else "roof_red.glb"
-		_module_house(at, size, face, "shell_plaster.glb", roof, "door_wood.glb", false)
 	else:
-		_module_house(at, size, face, "shell_plaster.glb", "roof_straw.glb", "door_wood.glb", false)
+		_trade_house(at, size, face, name)
 	var fx := at.x
 	var fz := at.z
 	if face == "e":
