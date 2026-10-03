@@ -1170,40 +1170,44 @@ func _add_npc(id: String, npc_name: String, pos: Vector3, rot: float, guard: boo
 	add_child(g)
 	var top := _mesh_top(g)
 	_tag(g, npc_name, top + 0.22)
-	var sk: Skeleton3D = g.get_meta("skeleton")
-	if id == "bren" and (sk == null or sk.find_bone("Chest") < 0):
-		push_error("Guard rig is missing the chest bone")
-	var ap: AnimationPlayer = g.get_meta("anim")
-	if ap != null:
-		ap.play("strike" if id == "marta" else "idle")
+	var bob: Node3D = g.get_meta("body")
+	var mesh_root := bob.get_node_or_null("Mesh") as Node3D
+	var limbs: Array = _bind_limbs(mesh_root) if mesh_root != null else []
+	if id == "bren":
+		var armored := false
+		for part in limbs:
+			if float(part["profile"]["arm_top"]) < 1.2:
+				armored = true
+		if not armored:
+			push_error("Inquisitor arms include the pauldrons")
 	npcs.append({
 		"id": id, "name": npc_name, "node": g,
+		"body": bob, "body_y": bob.position.y,
 		"lines": lines, "purse": 4, "picked": false, "i": 0,
 		"home": pos, "tgt": pos, "wander": randf() * 2.0, "guard": guard, "ally": false, "kind": "person",
-		"anim": ap
+		"limbs": limbs, "gait": randf() * TAU
 	})
 	if id == "marta":
-		_arm_hammer(g)
+		var hand := _arm_hammer(g)
 		npcs[npcs.size() - 1]["station"] = true
 		npcs[npcs.size() - 1]["work_yaw"] = rot
+		npcs[npcs.size() - 1]["hammer"] = hand
 
 func _npc_mesh(id: String) -> String:
 	match id:
 		"hob":
-			return "res://assets/psx-characters/hob.glb"
+			return "res://assets/psx-characters/peasant.glb"
 		"ralf":
-			return "res://assets/psx-characters/ralf.glb"
+			return "res://assets/psx-characters/peasant_blonde.glb"
 		"marta":
-			return "res://assets/psx-characters/marta.glb"
+			return "res://assets/psx-characters/bartender.glb"
 		"pell":
-			return "res://assets/psx-characters/pell.glb"
-		"bren":
-			return "res://assets/psx-characters/bren.glb"
-		"cole":
-			return "res://assets/psx-characters/cole.glb"
+			return "res://assets/psx-characters/nun.glb"
+		"bren", "cole":
+			return "res://assets/psx-characters/inquisitor.glb"
 		_:
-			push_error("No town mesh for NPC %s" % id)
-			return "res://assets/psx-characters/hob.glb"
+			push_error("No PSX mesh for NPC %s" % id)
+			return "res://assets/psx-characters/peasant.glb"
 
 func _rig_person(id: String) -> Node3D:
 	var g := Node3D.new()
@@ -1212,87 +1216,179 @@ func _rig_person(id: String) -> Node3D:
 	g.add_child(bob)
 	var packed: PackedScene = load(_npc_mesh(id)) as PackedScene
 	if packed == null:
-		push_error("Missing town mesh for %s" % id)
+		push_error("Missing PSX mesh for %s" % id)
 		g.set_meta("body", bob)
-		g.set_meta("anim", null)
-		g.set_meta("skeleton", null)
 		return g
 	var body: Node3D = packed.instantiate() as Node3D
 	body.name = "Mesh"
-	# Authored facing -Y in Blender. glTF export and the Godot 4.7 importer leave
-	# that face on local +Z, which is the axis the look-at already aims at the player.
+	# Imported in Godot 4.7.2 with an identity basis (root and mesh basis.z are +Z).
+	# Rasterizing the painted head puts the face on mesh -Z and the hood on +Z
+	# for the peasant, the nun, and the bartender. The shared look-at aims this
+	# rig's +Z at the player, which is also how the sprite critters face. A half
+	# turn brings the face around onto that axis.
+	body.rotation.y = PI
 	_psx_character(body)
 	bob.add_child(body)
-	var ap := _find_of_type(body, "AnimationPlayer") as AnimationPlayer
-	var sk := _find_of_type(body, "Skeleton3D") as Skeleton3D
-	if ap == null or sk == null:
-		push_error("%s rig has no skeleton clips" % id)
-	else:
-		_loop_clips(ap)
-		for clip in ["idle", "walk"]:
-			if not ap.has_animation(clip):
-				push_error("%s is missing a %s clip" % [id, clip])
-		if id == "marta" and not ap.has_animation("strike"):
-			push_error("Marta is missing a strike clip")
-		for bone in ["Hips", "Chest", "Head", "UpperArm.R", "ForeArm.R", "Hand.R", "Thigh.R", "Shin.R", "Foot.R"]:
-			if sk.find_bone(bone) < 0:
-				push_error("%s is missing bone %s" % [id, bone])
 	g.set_meta("body", bob)
-	g.set_meta("anim", ap)
-	g.set_meta("skeleton", sk)
 	return g
 
-func _find_of_type(n: Node, cls: String) -> Node:
-	if n.is_class(cls):
-		return n
+func _gather_meshes(n: Node, out: Array[MeshInstance3D]) -> void:
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		out.append(n as MeshInstance3D)
 	for c in n.get_children():
-		var found := _find_of_type(c, cls)
-		if found != null:
-			return found
-	return null
+		_gather_meshes(c, out)
 
-func _loop_clips(ap: AnimationPlayer) -> void:
-	for lib_name in ap.get_animation_library_list():
-		var lib := ap.get_animation_library(lib_name)
-		var copy_lib := AnimationLibrary.new()
-		for anim_name in lib.get_animation_list():
-			var copy := lib.get_animation(anim_name).duplicate()
-			copy.loop_mode = Animation.LOOP_LINEAR
-			copy_lib.add_animation(anim_name, copy)
-		ap.remove_animation_library(lib_name)
-		ap.add_animation_library(lib_name, copy_lib)
+func _limb_profile(rest: PackedVector3Array) -> Dictionary:
+	# Inquisitor pauldrons sit wide above the hanging forearms. The others are bare arms from the shoulder.
+	var high_wide := 0
+	for p in rest:
+		if p.y > 1.12 and absf(p.x) > 0.30:
+			high_wide += 1
+	if high_wide > 40:
+		return {
+			"shoulder_y": 1.05, "shoulder_x": 0.30, "arm_top": 1.06, "arm_bot": 0.62, "arm_fall": 0.32,
+			"hip_y": 0.82, "hip_x": 0.10, "leg_top": 0.84,
+		}
+	return {
+		"shoulder_y": 1.28, "shoulder_x": 0.20, "arm_top": 1.38, "arm_bot": 0.55, "arm_fall": 0.70,
+		"hip_y": 0.88, "hip_x": 0.10, "leg_top": 0.90,
+	}
 
-func _play_clip(n: Dictionary, clip: String) -> void:
-	var ap: AnimationPlayer = n.get("anim")
-	if ap == null:
-		return
-	if ap.current_animation == clip and ap.is_playing():
-		return
-	if not ap.has_animation(clip):
-		push_error("%s has no %s clip" % [str(n.get("id", "")), clip])
-		return
-	ap.play(clip)
+func _limb_weight(p: Vector3, prof: Dictionary) -> Vector2:
+	var ax := absf(p.x)
+	var arm := 0.0
+	if p.y > float(prof["arm_bot"]) and p.y < float(prof["arm_top"]) and ax > 0.18:
+		var outer := (ax - 0.18) / 0.12
+		if p.y < 0.95:
+			outer = (ax - 0.24) / 0.08
+		outer = clampf(outer, 0.0, 1.0)
+		var along := (float(prof["shoulder_y"]) - p.y) / float(prof["arm_fall"])
+		along = clampf(along, 0.0, 1.0)
+		arm = outer * along
+		if p.x < 0.0:
+			arm = -arm
+	var leg := 0.0
+	if p.y < float(prof["leg_top"]) and ax < 0.30 and absf(arm) < 0.2:
+		var w := clampf((float(prof["hip_y"]) - p.y) / 0.55, 0.0, 1.0)
+		if ax < 0.045:
+			w *= ax / 0.045
+		leg = w if p.x >= 0.0 else -w
+	return Vector2(arm, leg)
 
-func _arm_hammer(rig: Node3D) -> void:
+func _spin_x(p: Vector3, pivot: Vector3, ang: float) -> Vector3:
+	var c := cos(ang)
+	var s := sin(ang)
+	var y := p.y - pivot.y
+	var z := p.z - pivot.z
+	return Vector3(p.x, pivot.y + y * c - z * s, pivot.z + y * s + z * c)
+
+func _bind_limbs(root: Node3D) -> Array:
+	# None of the Nocturnal Watch GLBs ship a skin or a clip. Weights are painted from the stand pose.
+	var found: Array[MeshInstance3D] = []
+	_gather_meshes(root, found)
+	var parts: Array = []
+	var arm_verts := 0
+	for mi in found:
+		if mi.mesh.get_surface_count() < 1:
+			continue
+		var xf := root.global_transform.affine_inverse() * mi.global_transform
+		var arrays: Array = mi.mesh.surface_get_arrays(0)
+		var rest_in: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var rest := PackedVector3Array()
+		rest.resize(rest_in.size())
+		for i in rest_in.size():
+			rest[i] = xf * rest_in[i]
+		arrays[Mesh.ARRAY_VERTEX] = rest
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var painted: Material = mi.get_surface_override_material(0)
+		mi.mesh = mesh
+		if painted != null:
+			mi.set_surface_override_material(0, painted)
+		mi.reparent(root)
+		mi.transform = Transform3D.IDENTITY
+		var prof := _limb_profile(rest)
+		var arm_w := PackedFloat32Array()
+		var leg_w := PackedFloat32Array()
+		arm_w.resize(rest.size())
+		leg_w.resize(rest.size())
+		for i in rest.size():
+			var w := _limb_weight(rest[i], prof)
+			arm_w[i] = w.x
+			leg_w[i] = w.y
+			if absf(w.x) > 0.45:
+				arm_verts += 1
+		parts.append({
+			"mi": mi,
+			"mesh": mesh,
+			"arrays": arrays,
+			"rest": rest,
+			"arm": arm_w,
+			"leg": leg_w,
+			"profile": prof,
+			"mat": painted,
+		})
+	if arm_verts < 12:
+		push_error("Character mesh has no swingable arms")
+	_pose_limbs(parts, 0.0, 0.0, 0.0)
+	return parts
+
+func _pose_limbs(parts: Array, arm_ang: float, leg_ang: float, breath: float) -> void:
+	var br := sin(breath)
+	for part in parts:
+		var rest: PackedVector3Array = part["rest"]
+		var arm_w: PackedFloat32Array = part["arm"]
+		var leg_w: PackedFloat32Array = part["leg"]
+		var prof: Dictionary = part["profile"]
+		var sy := float(prof["shoulder_y"])
+		var sx := float(prof["shoulder_x"])
+		var hy := float(prof["hip_y"])
+		var hx := float(prof["hip_x"])
+		var posed := PackedVector3Array()
+		posed.resize(rest.size())
+		for i in rest.size():
+			var p := rest[i]
+			var aw := arm_w[i]
+			var lw := leg_w[i]
+			if absf(lw) > 0.001:
+				var ls := 1.0 if lw > 0.0 else -1.0
+				p = _spin_x(p, Vector3(hx * ls, hy, 0.0), -leg_ang * lw)
+			if absf(aw) > 0.001:
+				var asgn := 1.0 if aw > 0.0 else -1.0
+				p = _spin_x(p, Vector3(sx * asgn, sy, 0.02), arm_ang * aw)
+			if absf(aw) < 0.25 and absf(lw) < 0.25 and p.y > 0.95 and p.y < 1.55:
+				var e := br * 0.01 * (p.y - 0.9)
+				p.x += e * (1.0 if p.x >= 0.0 else -1.0)
+				p.z += br * 0.005
+			elif p.y > 1.55 and absf(aw) < 0.1:
+				p = _spin_x(p, Vector3(0.0, 1.5, 0.0), br * 0.035)
+			posed[i] = p
+		var arrays: Array = part["arrays"]
+		arrays[Mesh.ARRAY_VERTEX] = posed
+		var mesh: ArrayMesh = part["mesh"]
+		mesh.clear_surfaces()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var mi: MeshInstance3D = part["mi"]
+		var mat: Material = part["mat"]
+		if mat != null:
+			mi.set_surface_override_material(0, mat)
+
+func _arm_hammer(rig: Node3D) -> Node3D:
 	var packed: PackedScene = load("res://assets/psx-smith/strike_hammer.glb") as PackedScene
-	var sk: Skeleton3D = rig.get_meta("skeleton")
-	if sk == null or sk.find_bone("Hand.R") < 0:
-		push_error("Marta has no hand bone for the hammer")
-		return
+	var hand := Node3D.new()
+	hand.name = "Hammer"
+	# Rig +Z is her face, aimed at the anvil. The right hand sits on -X.
+	hand.position = Vector3(-0.2, 1.02, 0.08)
+	var bob: Node3D = rig.get_meta("body")
+	bob.add_child(hand)
 	if packed == null:
 		push_error("Missing strike hammer")
-		return
-	var att := BoneAttachment3D.new()
-	att.name = "Hammer"
-	sk.add_child(att)
-	att.bone_name = "Hand.R"
+		return hand
 	var hammer := packed.instantiate() as Node3D
-	# The hand bone points down the fingers. The hammer's handle is its local +Y,
-	# butt at the origin, so the head rides past the fist and follows the strike.
-	hammer.position = Vector3(0.0, 0.08, 0.0)
-	hammer.scale = Vector3(1.2, 1.2, 1.2)
+	hammer.scale = Vector3(1.4, 1.4, 1.4)
 	_unshade(hammer, false)
-	att.add_child(hammer)
+	hand.add_child(hammer)
+	return hand
 
 func _psx_character(n: Node) -> void:
 	if n is MeshInstance3D:
@@ -1302,8 +1398,8 @@ func _psx_character(n: Node) -> void:
 			for i in mi.mesh.get_surface_count():
 				var src: Material = mi.get_active_material(i)
 				var m := StandardMaterial3D.new()
-				if src is BaseMaterial3D:
-					var painted: BaseMaterial3D = src as BaseMaterial3D
+				if src is StandardMaterial3D:
+					var painted: StandardMaterial3D = src as StandardMaterial3D
 					m.albedo_texture = painted.albedo_texture
 					m.albedo_color = painted.albedo_color
 				m.roughness = 1.0
@@ -3515,8 +3611,25 @@ func _anim_npcs(delta: float) -> void:
 		if bool(n.get("station", false)):
 			n["node"].global_position = home
 			n["node"].rotation.y = float(n["work_yaw"])
-			if str(n.get("kind", "")) == "person":
-				_play_clip(n, "strike")
+			var hand: Node3D = n.get("hammer") as Node3D
+			if hand != null:
+				var phase := fposmod(fairy_t * 1.25, 1.0)
+				var swing := -0.2
+				if phase < 0.62:
+					swing = lerpf(-0.2, -1.45, phase / 0.62)
+				elif phase < 0.78:
+					swing = lerpf(-1.45, 0.95, (phase - 0.62) / 0.16)
+				else:
+					swing = lerpf(0.95, -0.2, (phase - 0.78) / 0.22)
+				hand.rotation.x = swing
+				if n.get("body"):
+					var smith_body: Node3D = n["body"]
+					smith_body.position.y = float(n.get("body_y", 0.0)) + sin(fairy_t * 1.6) * 0.008
+					var strike := clampf((swing + 1.45) / 2.4, 0.0, 1.0)
+					smith_body.rotation.x = lerpf(0.0, 0.22, strike)
+					smith_body.rotation.z = 0.0
+				if n.get("limbs"):
+					_pose_limbs(n["limbs"], swing * 0.28, sin(fairy_t * 1.1) * 0.03, fairy_t * 1.7)
 			continue
 		if moving:
 			var sp := 3.0 if n.get("kind", "") == "critter" else (0.7 if n.get("kind", "") == "hound" else 1.2)
@@ -3527,17 +3640,33 @@ func _anim_npcs(delta: float) -> void:
 				n["sitSpr"].visible = sitting
 			if n.get("walkSpr"):
 				n["walkSpr"].visible = not sitting
-		# Rig +Z is the face. atan2(x, z) aims that axis along a direction.
+		# Rig +Z is the face: character meshes are turned 180° inside the rig, and
+		# sprites already face +Z. atan2(x, z) aims that axis along a direction.
 		# look_at() would aim -Z and show every back. Walkers face their step so
 		# the stride is not a slide; standing still they face the player again.
 		var to_cam: Vector3 = player.global_position - n["node"].global_position
 		if str(n.get("kind", "")) == "person" and moving and d.length_squared() > 0.0001:
 			n["node"].rotation.y = atan2(d.x, d.z)
-			_play_clip(n, "walk")
 		elif to_cam.length_squared() > 0.0001:
 			n["node"].rotation.y = atan2(to_cam.x, to_cam.z)
-			if str(n.get("kind", "")) == "person":
-				_play_clip(n, "idle")
+		if moving and str(n.get("kind", "")) == "person":
+			n["gait"] = float(n.get("gait", 0.0)) + delta * 7.4
+		var gait := float(n.get("gait", 0.0))
+		if n.get("body") and str(n.get("kind", "")) == "person":
+			var body: Node3D = n["body"]
+			var base_y: float = float(n.get("body_y", 0.0))
+			if moving:
+				body.position.y = base_y + absf(sin(gait)) * 0.03
+				body.rotation.z = sin(gait) * 0.025
+				body.rotation.x = 0.05
+			else:
+				body.position.y = base_y + sin(fairy_t * 1.6 + home.x) * 0.008
+				body.rotation.z = sin(fairy_t * 0.9 + home.x) * 0.01
+				body.rotation.x = 0.0
+			if n.get("limbs"):
+				var arm_ang := sin(gait) * 0.58 if moving else sin(fairy_t * 1.25 + home.x) * 0.08
+				var leg_ang := sin(gait) * 0.45 if moving else sin(fairy_t * 1.05 + home.z) * 0.035
+				_pose_limbs(n["limbs"], arm_ang, leg_ang, fairy_t * 1.6 + home.x)
 
 func _apply_look() -> void:
 	player.rotation.y = yaw
