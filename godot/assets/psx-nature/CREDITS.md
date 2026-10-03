@@ -8,7 +8,7 @@ Free (name-your-price). Credit the author by name.
 Converted from the shipped `.blend` to GLB (tree1–5, bush1–3,5–6).
 
 ## Grass cards
-Elegant Crow Retro PSX textures (CC0)
+Elegant Crow Retro PSX textures (CC0). The grass cards, grass-bush cards, and the grassy rocks also break up the Harth road verge.
 
 ## Later zone
 Kenney Nature Kit (CC0) — not scattered in Harth
