@@ -6,7 +6,9 @@ https://toboas.itch.io/psx-fantasy-pack-nocturnal-watch
 
 CC0. The author says no credits are required. Credited here anyway, same place as the other packs.
 
-Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). Root rotations are baked into the vertices and the imported node basis is identity. The painted face is mesh −Z (hood is +Z), measured by rasterizing the head. The rig turns the mesh 180° so the face lies on the rig's +Z, and the look-at (`atan2` of the offset to the player) aims that axis at the camera. The pack ships a bind-pose T with no skeleton and no clips, so the rest pose has the arms lowered to a stand. Marta keeps this mesh. She stands at the anvil and a separate hammer swings on a loop; she does not turn to face the player. The other named NPCs still do.
+Shipped meshes (converted from the pack's FBX to GLB, feet on the ground). Root rotations are baked into the vertices and the imported node basis is identity. The painted face is mesh −Z (hood is +Z), measured by rasterizing the head. The rig turns the mesh 180° so the face lies on the rig's +Z, and the look-at (`atan2` of the offset to the player) aims that axis at the camera.
+
+Every GLB in this folder is one static mesh. There is no skin, no skeleton, and no animation clip to retarget, including the bartender. The stand pose already has the arms lowered. The scene paints arm and leg weights from that pose and swings them in place: a walk cycle while an NPC is moving, a small sway and a breath while they stand. The inquisitor's pauldrons stay on the torso; only the hanging forearms swing. Marta does not walk and does not turn to face the player. Her hammer loop is unchanged, and her right arm cocks with that swing. Nix stays the billboard.
 
 | NPC | Mesh | Texture |
 |---|---|---|
